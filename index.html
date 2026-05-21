@@ -1,0 +1,460 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>图片拼接工具</title>
+    <style>
+        * { margin: 0; padding: 0; box-sizing: border-box; font-family: Arial, sans-serif; }
+        body { max-width: 1000px; margin: 0 auto; padding: 20px; background: #f5f5f5; }
+        .container { background: white; padding: 25px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
+        h1 { text-align: center; color: #333; margin-bottom: 20px; font-size: 22px; }
+        .upload-area { border: 2px dashed #409eff; border-radius: 6px; padding: 30px 15px; text-align: center; 
+                       margin-bottom: 20px; cursor: pointer; transition: all 0.2s; }
+        .upload-area:hover { background: #f0f7ff; }
+        .upload-area h3 { color: #409eff; margin-bottom: 8px; font-size: 18px; }
+        .upload-area p { color: #666; font-size: 14px; }
+        #file-input { display: none; }
+        .controls { display: flex; justify-content: center; align-items: center; gap: 15px; margin-bottom: 20px; flex-wrap: wrap; }
+        .control-group { display: flex; align-items: center; gap: 6px; }
+        label { color: #333; font-size: 14px; }
+        input[type="number"] { padding: 6px 10px; border: 1px solid #ddd; border-radius: 4px; width: 80px; }
+        button { padding: 8px 20px; background: #409eff; color: white; border: none; border-radius: 4px; 
+                 cursor: pointer; font-size: 14px; transition: background 0.2s; }
+        button:hover { background: #337ecc; }
+        button:disabled { background: #ccc; cursor: not-allowed; }
+        .image-list { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; min-height: 30px; padding: 10px; border: 1px solid #eee; border-radius: 4px; }
+        .image-item { padding: 6px 10px; background: #f8f9fa; border: 1px solid #ddd; border-radius: 4px; 
+                      display: flex; align-items: center; gap: 6px; font-size: 14px; cursor: move; /* 拖动光标 */
+                      user-select: none; /* 禁止文字选中 */ transition: all 0.2s; }
+        .image-item:hover { background: #f0f7ff; border-color: #409eff; }
+        .image-item.dragging { opacity: 0.7; background: #e6f7ff; border-color: #1890ff; }
+        .image-item .filename { max-width: 180px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #333; }
+        .image-item .remove-btn { background: #ff4949; color: white; border: none; border-radius: 3px; width: 20px; height: 20px; 
+                                  font-size: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; }
+        .result-area { text-align: center; }
+        .result-image { max-width: 100%; border: 1px solid #eee; border-radius: 4px; margin-bottom: 15px; }
+        .hidden { display: none; }
+        .tip { color: #ff6600; text-align: center; font-size: 13px; margin: 10px 0; }
+        .size-tip { color: #409eff; text-align: center; font-size: 13px; margin: 5px 0; }
+        /* 重置按钮样式 */
+        #reset-btn { background: #666; }
+        #reset-btn:hover { background: #444; }
+    </style>
+</head>
+<body>
+    <div class="container">
+        <h1>图片拼接工具</h1>
+        <p class="tip">✅ 复制 → 直接粘贴即可使用 | 📌 可拖动调整图片顺序 | 📏 自动压缩大于10MB的图片</p>
+        
+        <div class="upload-area" id="upload-area">
+            <h3>点击上传图片 | 复制飞书图片后直接粘贴</h3>
+            <p>支持多张图片，粘贴/上传后可删除不需要的图片</p>
+            <input type="file" id="file-input" accept="image/*" multiple>
+        </div>
+
+        <div class="image-list" id="image-list"></div>
+
+        <div class="controls">
+            <div class="control-group">
+                <label>图片间距：</label>
+                <input type="number" id="gap" value="10" min="0" max="50" placeholder="px">
+            </div>
+            <button id="merge-btn" disabled>开始拼接</button>
+            <button id="reset-btn">重置全部</button> <!-- 新增重置按钮 -->
+            <button id="download-btn" class="hidden">下载拼接结果</button>
+        </div>
+
+        <div class="result-area" id="result-area">
+            <canvas id="result-canvas" class="result-image hidden"></canvas>
+            <div id="size-tip" class="size-tip hidden"></div>
+        </div>
+    </div>
+
+    <script>
+        const imageList = [];
+        let resultCtx = null;
+        let finalImageData = null; // 存储最终的图片数据（Base64）
+        let finalImageFormat = 'png'; // 默认格式为PNG
+        // 拖动相关变量
+        let draggingIndex = -1; // 正在拖动的图片索引
+        let dragOverIndex = -1; // 拖动覆盖的图片索引
+
+        // 10MB的字节数（10 * 1024 * 1024）
+        const MAX_SIZE_BYTES = 10 * 1024 * 1024;
+
+        // DOM元素
+        const uploadArea = document.getElementById('upload-area');
+        const fileInput = document.getElementById('file-input');
+        const imageListEl = document.getElementById('image-list');
+        const gapInput = document.getElementById('gap');
+        const mergeBtn = document.getElementById('merge-btn');
+        const downloadBtn = document.getElementById('download-btn');
+        const resultCanvas = document.getElementById('result-canvas');
+        const resetBtn = document.getElementById('reset-btn'); // 重置按钮
+        const sizeTipEl = document.getElementById('size-tip');
+
+        // 初始化
+        function init() {
+            resultCtx = resultCanvas.getContext('2d');
+            bindAllEvents();
+        }
+
+        // 绑定所有事件
+        function bindAllEvents() {
+            // 点击上传
+            uploadArea.addEventListener('click', () => fileInput.click());
+            // 文件选择
+            fileInput.addEventListener('change', (e) => handleFiles(e.target.files));
+            // 核心：处理粘贴（适配飞书格式）
+            document.addEventListener('paste', handleFeishuPaste);
+            // 拖拽上传
+            uploadArea.addEventListener('dragover', (e) => {
+                e.preventDefault();
+                uploadArea.style.background = '#f0f7ff';
+            });
+            uploadArea.addEventListener('dragleave', () => {
+                uploadArea.style.background = 'white';
+            });
+            uploadArea.addEventListener('drop', (e) => {
+                e.preventDefault();
+                uploadArea.style.background = 'white';
+                handleFiles(e.dataTransfer.files);
+            });
+            // 拼接/下载/重置
+            mergeBtn.addEventListener('click', mergeImages);
+            downloadBtn.addEventListener('click', downloadResult);
+            resetBtn.addEventListener('click', resetAll); // 绑定重置事件
+            // 绑定拖动相关事件
+            bindDragEvents();
+        }
+
+        // 绑定图片拖动事件
+        function bindDragEvents() {
+            imageListEl.addEventListener('mousedown', (e) => {
+                const item = e.target.closest('.image-item');
+                if (!item) return;
+                
+                // 记录拖动的索引
+                draggingIndex = parseInt(item.querySelector('.remove-btn').dataset.index);
+                item.classList.add('dragging');
+                
+                // 鼠标移动事件（全局）
+                const handleMouseMove = (e) => {
+                    e.preventDefault();
+                    const hoverItem = document.elementFromPoint(e.clientX, e.clientY)?.closest('.image-item');
+                    if (!hoverItem) {
+                        dragOverIndex = -1;
+                        return;
+                    }
+                    // 更新覆盖的索引
+                    dragOverIndex = parseInt(hoverItem.querySelector('.remove-btn').dataset.index);
+                    // 交换图片顺序（仅当索引不同时）
+                    if (draggingIndex !== -1 && dragOverIndex !== -1 && draggingIndex !== dragOverIndex) {
+                        [imageList[draggingIndex], imageList[dragOverIndex]] = [imageList[dragOverIndex], imageList[draggingIndex]];
+                        updateImageListUI(); // 重新渲染列表
+                        draggingIndex = dragOverIndex; // 更新拖动索引（保持拖动状态）
+                    }
+                };
+
+                // 鼠标松开事件（全局）
+                const handleMouseUp = () => {
+                    const draggingItem = document.querySelector('.image-item.dragging');
+                    if (draggingItem) draggingItem.classList.remove('dragging');
+                    draggingIndex = -1;
+                    dragOverIndex = -1;
+                    // 移除全局事件
+                    document.removeEventListener('mousemove', handleMouseMove);
+                    document.removeEventListener('mouseup', handleMouseUp);
+                };
+
+                // 添加全局事件
+                document.addEventListener('mousemove', handleMouseMove);
+                document.addEventListener('mouseup', handleMouseUp);
+            });
+        }
+
+        // 核心：处理飞书表格图片粘贴
+        async function handleFeishuPaste(e) {
+            e.preventDefault();
+            const clipboardData = e.clipboardData || window.clipboardData;
+            if (!clipboardData) return;
+
+            try {
+                // 1. 优先处理File类型（普通截图/本地图片）
+                if (clipboardData.files && clipboardData.files.length > 0) {
+                    handleFiles(clipboardData.files);
+                    return;
+                }
+
+                // 2. 解析飞书剪贴板的HTML数据（核心适配逻辑）
+                const htmlData = await getClipboardHtml(clipboardData);
+                if (!htmlData) return;
+
+                // 提取飞书图片的Base64/URL（适配飞书最新格式）
+                const imgMatches = htmlData.match(/<img[^>]*src=["']([^"']+)["']/gi);
+                if (!imgMatches) return;
+
+                for (const match of imgMatches) {
+                    const src = match.match(/src=["']([^"']+)["']/)[1];
+                    if (src) {
+                        // 飞书图片处理：URL转Base64（绕开防盗链）
+                        const imageData = await convertFeishuImageToBase64(src);
+                        if (imageData) {
+                            addImageToGallery(imageData, `飞书图片_${Date.now()}.png`);
+                        }
+                    }
+                }
+            } catch (err) {
+                console.error('粘贴失败:', err);
+                alert('飞书图片粘贴失败，请重试（建议复制单元格图片后直接粘贴）');
+            }
+        }
+
+        // 获取剪贴板中的HTML数据
+        function getClipboardHtml(clipboardData) {
+            return new Promise((resolve) => {
+                const items = clipboardData.items || [];
+                for (let item of items) {
+                    if (item.kind === 'string' && item.type === 'text/html') {
+                        item.getAsString(resolve);
+                        return;
+                    }
+                }
+                resolve(null);
+            });
+        }
+
+        // 飞书图片URL/Base64转可用的Base64（核心解决防盗链）
+        async function convertFeishuImageToBase64(src) {
+            // 本身是Base64直接返回
+            if (src.startsWith('data:image/')) {
+                return src;
+            }
+
+            // 飞书URL转Base64（添加referer绕开防盗链）
+            if (src.includes('feishu.cn') || src.includes('larksuite.com')) {
+                const response = await fetch(src, {
+                    method: 'GET',
+                    headers: {
+                        'Referer': 'https://www.feishu.cn/', // 关键：添加飞书referer
+                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                    },
+                    mode: 'cors',
+                    cache: 'no-cache'
+                });
+
+                if (!response.ok) throw new Error('图片获取失败');
+                const blob = await response.blob();
+                return new Promise((resolve) => {
+                    const reader = new FileReader();
+                    reader.onload = () => resolve(reader.result);
+                    reader.readAsDataURL(blob);
+                });
+            }
+
+            return null;
+        }
+
+        // 处理文件（上传/粘贴）
+        function handleFiles(files) {
+            if (!files || files.length === 0) return;
+            Array.from(files).forEach(file => {
+                if (!file.type.startsWith('image/')) return;
+                const reader = new FileReader();
+                reader.onload = (e) => addImageToGallery(e.target.result, file.name);
+                reader.readAsDataURL(file);
+            });
+        }
+
+        // 添加图片到列表
+        function addImageToGallery(imageBase64, filename) {
+            const img = new Image();
+            img.crossOrigin = 'anonymous';
+            img.onload = () => {
+                // 存入图片列表
+                imageList.push({
+                    src: imageBase64,
+                    filename: filename,
+                    width: img.width,
+                    height: img.height,
+                    img: img
+                });
+                // 更新UI
+                updateImageListUI();
+                // 修改：只要有图片就启用拼接按钮（移除≥2的限制）
+                mergeBtn.disabled = imageList.length < 1;
+            };
+            img.src = imageBase64;
+        }
+
+        // 更新图片列表UI
+        function updateImageListUI() {
+            imageListEl.innerHTML = '';
+            imageList.forEach((item, index) => {
+                const itemEl = document.createElement('div');
+                itemEl.className = 'image-item';
+                itemEl.innerHTML = `
+                    <span class="filename" title="${item.filename}">${item.filename}</span>
+                    <button class="remove-btn" data-index="${index}">×</button>
+                `;
+                // 删除图片
+                itemEl.querySelector('.remove-btn').addEventListener('click', (e) => {
+                    const idx = parseInt(e.target.dataset.index);
+                    imageList.splice(idx, 1);
+                    updateImageListUI();
+                    // 修改：删除后只要图片数<1就禁用按钮（移除≥2的限制）
+                    mergeBtn.disabled = imageList.length < 1;
+                });
+                imageListEl.appendChild(itemEl);
+            });
+        }
+
+        // 计算Base64字符串的字节大小
+        function getBase64Size(base64Str) {
+            // Base64编码的字符串大小计算：去掉前缀后，长度 * 3/4 - 填充符数量
+            const base64WithoutPrefix = base64Str.split(',')[1] || base64Str;
+            const padding = (base64WithoutPrefix.match(/=/g) || []).length;
+            const sizeInBytes = (base64WithoutPrefix.length * 3 / 4) - padding;
+            return sizeInBytes;
+        }
+
+        // 将Base64转换为Blob对象
+        function base64ToBlob(base64Str, mimeType) {
+            const base64WithoutPrefix = base64Str.split(',')[1];
+            const byteCharacters = atob(base64WithoutPrefix);
+            const byteArrays = [];
+            for (let offset = 0; offset < byteCharacters.length; offset += 512) {
+                const slice = byteCharacters.slice(offset, offset + 512);
+                const byteNumbers = new Array(slice.length);
+                for (let i = 0; i < slice.length; i++) {
+                    byteNumbers[i] = slice.charCodeAt(i);
+                }
+                const byteArray = new Uint8Array(byteNumbers);
+                byteArrays.push(byteArray);
+            }
+            return new Blob(byteArrays, { type: mimeType });
+        }
+
+        // 压缩图片（转为JPG并调整质量）
+        function compressImageToJpg(canvas, quality = 0.8) {
+            return new Promise((resolve) => {
+                // 将Canvas转为JPG格式的Base64
+                const jpgBase64 = canvas.toDataURL('image/jpeg', quality);
+                resolve({
+                    data: jpgBase64,
+                    format: 'jpg'
+                });
+            });
+        }
+
+        // 仅纵向拼接（核心逻辑）
+        async function mergeImages() {
+            const gap = parseInt(gapInput.value) || 0;
+            const images = imageList.map(item => item.img);
+
+            // 修改：删除图片数≥2的校验逻辑
+            if (images.length < 1) {
+                alert('请至少添加1张图片再拼接');
+                return;
+            }
+
+            // 计算画布尺寸
+            const maxWidth = Math.max(...images.map(img => img.width));
+            // 修改：单张图片时间距为0，多张时正常计算
+            const totalHeight = images.reduce((sum, img) => sum + img.height, 0) + (images.length > 1 ? gap * (images.length - 1) : 0);
+
+            // 绘制图片
+            resultCanvas.width = maxWidth;
+            resultCanvas.height = totalHeight;
+            resultCtx.clearRect(0, 0, maxWidth, totalHeight);
+
+            let y = 0;
+            images.forEach(img => {
+                const x = (maxWidth - img.width) / 2; // 水平居中
+                resultCtx.drawImage(img, x, y, img.width, img.height);
+                // 修改：单张图片时不增加间距
+                if (images.length > 1) {
+                    y += img.height + gap;
+                } else {
+                    y += img.height;
+                }
+            });
+
+            // 第一步：先导出为PNG格式
+            finalImageData = resultCanvas.toDataURL('image/png', 1.0);
+            finalImageFormat = 'png';
+            let imageSize = getBase64Size(finalImageData);
+            let sizeTip = `拼接完成！图片大小：${(imageSize / 1024 / 1024).toFixed(2)}MB（PNG格式）`;
+
+            // 第二步：判断是否超过10MB，如果超过则转为JPG压缩
+            if (imageSize > MAX_SIZE_BYTES) {
+                sizeTip = `PNG格式图片大小${(imageSize / 1024 / 1024).toFixed(2)}MB > 10MB，自动转为JPG格式压缩...`;
+                sizeTipEl.textContent = sizeTip;
+                sizeTipEl.classList.remove('hidden');
+                
+                // 压缩为JPG（质量0.8，可根据需要调整）
+                const compressed = await compressImageToJpg(resultCanvas, 0.8);
+                finalImageData = compressed.data;
+                finalImageFormat = compressed.format;
+                
+                // 重新计算压缩后的大小
+                const compressedSize = getBase64Size(finalImageData);
+                sizeTip = `压缩完成！JPG格式图片大小：${(compressedSize / 1024 / 1024).toFixed(2)}MB（原PNG：${(imageSize / 1024 / 1024).toFixed(2)}MB）`;
+            }
+
+            // 显示结果、下载按钮和大小提示
+            resultCanvas.classList.remove('hidden');
+            downloadBtn.classList.remove('hidden');
+            sizeTipEl.textContent = sizeTip;
+            sizeTipEl.classList.remove('hidden');
+        }
+
+        // 下载拼接结果
+        function downloadResult() {
+            if (!finalImageData) {
+                alert('暂无拼接结果可下载');
+                return;
+            }
+
+            try {
+                const link = document.createElement('a');
+                link.download = `飞书图片拼接结果_${Date.now()}.${finalImageFormat}`;
+                link.href = finalImageData;
+                document.body.appendChild(link);
+                link.click();
+                document.body.removeChild(link);
+            } catch (err) {
+                alert('下载失败，请重试');
+                console.error('下载失败:', err);
+            }
+        }
+
+        // 重置全部功能（移除确认提示）
+        function resetAll() {
+            // 直接清空，无确认提示
+            // 清空图片列表
+            imageList.length = 0;
+            // 重置全局变量
+            finalImageData = null;
+            finalImageFormat = 'png';
+            // 重置UI
+            updateImageListUI();
+            mergeBtn.disabled = true;
+            // 隐藏结果、下载按钮和大小提示
+            resultCanvas.classList.add('hidden');
+            downloadBtn.classList.add('hidden');
+            sizeTipEl.classList.add('hidden');
+            // 清空画布
+            resultCtx.clearRect(0, 0, resultCanvas.width, resultCanvas.height);
+            // 重置间距输入框
+            gapInput.value = 10;
+        }
+
+        // 启动
+        init();
+    </script>
+</body>
+</html>
+
+    
