@@ -1,3 +1,4 @@
+      
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -40,6 +41,90 @@
         /* 重置按钮样式 */
         #reset-btn { background: #666; }
         #reset-btn:hover { background: #444; }
+        /* 弹窗样式 */
+        .modal-overlay {
+            position: fixed;
+            top: 0;
+            left: 0;
+            width: 100%;
+            height: 100%;
+            background: rgba(0, 0, 0, 0.5);
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            z-index: 1000;
+        }
+        .modal-overlay.hidden { display: none; }
+        .modal {
+            background: white;
+            padding: 25px;
+            border-radius: 8px;
+            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
+            min-width: 350px;
+            max-width: 90%;
+        }
+        .modal h3 {
+            color: #333;
+            margin-bottom: 20px;
+            font-size: 18px;
+        }
+        .form-group {
+            margin-bottom: 15px;
+        }
+        .form-group label {
+            display: block;
+            margin-bottom: 6px;
+            color: #333;
+            font-size: 14px;
+            font-weight: bold;
+        }
+        .form-group input[type="text"] {
+            width: 100%;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            font-size: 14px;
+            box-sizing: border-box;
+        }
+        .format-options {
+            display: flex;
+            gap: 15px;
+            margin-top: 8px;
+        }
+        .format-option {
+            display: flex;
+            align-items: center;
+            gap: 6px;
+            cursor: pointer;
+            padding: 8px 12px;
+            border: 1px solid #ddd;
+            border-radius: 4px;
+            transition: all 0.2s;
+        }
+        .format-option:hover {
+            border-color: #409eff;
+            background: #f0f7ff;
+        }
+        .format-option.selected {
+            border-color: #409eff;
+            background: #e6f7ff;
+        }
+        .format-option input[type="radio"] {
+            margin: 0;
+            cursor: pointer;
+        }
+        .modal-buttons {
+            display: flex;
+            justify-content: flex-end;
+            gap: 10px;
+            margin-top: 20px;
+        }
+        .modal-buttons .cancel-btn {
+            background: #909399;
+        }
+        .modal-buttons .cancel-btn:hover {
+            background: #73767a;
+        }
     </style>
 </head>
 <body>
@@ -71,6 +156,34 @@
         </div>
     </div>
 
+    <!-- 下载弹窗 -->
+    <div class="modal-overlay hidden" id="download-modal">
+        <div class="modal">
+            <h3>下载图片</h3>
+            <div class="form-group">
+                <label for="filename-input">文件名：</label>
+                <input type="text" id="filename-input" placeholder="请输入文件名">
+            </div>
+            <div class="form-group">
+                <label>图片格式：</label>
+                <div class="format-options">
+                    <label class="format-option selected" data-format="png">
+                        <input type="radio" name="format" value="png" checked>
+                        PNG（无损）
+                    </label>
+                    <label class="format-option" data-format="jpg">
+                        <input type="radio" name="format" value="jpg">
+                        JPG（体积小）
+                    </label>
+                </div>
+            </div>
+            <div class="modal-buttons">
+                <button class="cancel-btn" id="modal-cancel-btn">取消</button>
+                <button id="modal-confirm-btn">确认下载</button>
+            </div>
+        </div>
+    </div>
+
     <script>
         const imageList = [];
         let resultCtx = null;
@@ -93,6 +206,13 @@
         const resultCanvas = document.getElementById('result-canvas');
         const resetBtn = document.getElementById('reset-btn'); // 重置按钮
         const sizeTipEl = document.getElementById('size-tip');
+        // 下载弹窗相关
+        const downloadModal = document.getElementById('download-modal');
+        const filenameInput = document.getElementById('filename-input');
+        const modalCancelBtn = document.getElementById('modal-cancel-btn');
+        const modalConfirmBtn = document.getElementById('modal-confirm-btn');
+        const formatOptions = document.querySelectorAll('.format-option');
+        let selectedFormat = 'png'; // 当前选择的格式
 
         // 初始化
         function init() {
@@ -123,8 +243,26 @@
             });
             // 拼接/下载/重置
             mergeBtn.addEventListener('click', mergeImages);
-            downloadBtn.addEventListener('click', downloadResult);
+            downloadBtn.addEventListener('click', showDownloadModal);
             resetBtn.addEventListener('click', resetAll); // 绑定重置事件
+            // 下载弹窗事件
+            modalCancelBtn.addEventListener('click', hideDownloadModal);
+            modalConfirmBtn.addEventListener('click', confirmDownload);
+            // 格式选择事件
+            formatOptions.forEach(option => {
+                option.addEventListener('click', () => {
+                    formatOptions.forEach(opt => opt.classList.remove('selected'));
+                    option.classList.add('selected');
+                    selectedFormat = option.dataset.format;
+                    option.querySelector('input[type="radio"]').checked = true;
+                });
+            });
+            // 点击弹窗外部关闭
+            downloadModal.addEventListener('click', (e) => {
+                if (e.target === downloadModal) {
+                    hideDownloadModal();
+                }
+            });
             // 绑定拖动相关事件
             bindDragEvents();
         }
@@ -410,17 +548,99 @@
             sizeTipEl.classList.remove('hidden');
         }
 
-        // 下载拼接结果
-        function downloadResult() {
+        // 显示下载弹窗
+        function showDownloadModal() {
             if (!finalImageData) {
                 alert('暂无拼接结果可下载');
                 return;
             }
+            // 设置默认文件名（不带扩展名）
+            const defaultName = `飞书图片拼接结果_${Date.now()}`;
+            filenameInput.value = defaultName;
+            // 重置格式选择为当前格式
+            selectedFormat = finalImageFormat;
+            formatOptions.forEach(opt => {
+                if (opt.dataset.format === selectedFormat) {
+                    opt.classList.add('selected');
+                    opt.querySelector('input[type="radio"]').checked = true;
+                } else {
+                    opt.classList.remove('selected');
+                    opt.querySelector('input[type="radio"]').checked = false;
+                }
+            });
+            // 显示弹窗
+            downloadModal.classList.remove('hidden');
+            // 聚焦到文件名输入框
+            setTimeout(() => filenameInput.focus(), 100);
+        }
+
+        // 隐藏下载弹窗
+        function hideDownloadModal() {
+            downloadModal.classList.add('hidden');
+        }
+
+        // 获取指定格式的图片数据
+        async function getImageDataByFormat(format) {
+            if (format === finalImageFormat) {
+                return finalImageData;
+            }
+            // 如果格式不同，需要重新转换
+            if (format === 'jpg') {
+                const compressed = await compressImageToJpg(resultCanvas, 0.9);
+                return compressed.data;
+            } else {
+                // 转成PNG
+                return resultCanvas.toDataURL('image/png', 1.0);
+            }
+        }
+
+        // 确认下载
+        async function confirmDownload() {
+            let fileName = filenameInput.value.trim();
+            if (!fileName) {
+                alert('请输入文件名');
+                filenameInput.focus();
+                return;
+            }
+
+            // 移除文件名中的非法字符
+            fileName = fileName.replace(/[\\/:*?"<>|]/g, '_');
+            const fullFileName = `${fileName}.${selectedFormat}`;
+            const mimeType = selectedFormat === 'jpg' ? 'image/jpeg' : 'image/png';
 
             try {
+                hideDownloadModal();
+
+                // 获取对应格式的图片数据
+                const imageData = await getImageDataByFormat(selectedFormat);
+
+                if ('showSaveFilePicker' in window) {
+                    try {
+                        const fileHandle = await window.showSaveFilePicker({
+                            suggestedName: fullFileName,
+                            types: [{
+                                description: '图片文件',
+                                accept: { [mimeType]: [`.${selectedFormat}`] }
+                            }]
+                        });
+
+                        const blob = base64ToBlob(imageData, mimeType);
+                        const writable = await fileHandle.createWritable();
+                        await writable.write(blob);
+                        await writable.close();
+                        return;
+                    } catch (pickerErr) {
+                        if (pickerErr.name === 'AbortError') {
+                            return;
+                        }
+                        console.warn('文件选择器不可用，使用默认下载方式:', pickerErr);
+                    }
+                }
+
+                // 降级方案：使用a标签下载
                 const link = document.createElement('a');
-                link.download = `飞书图片拼接结果_${Date.now()}.${finalImageFormat}`;
-                link.href = finalImageData;
+                link.download = fullFileName;
+                link.href = imageData;
                 document.body.appendChild(link);
                 link.click();
                 document.body.removeChild(link);
