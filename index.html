@@ -323,20 +323,56 @@
             const clipboardData = e.clipboardData || window.clipboardData;
             if (!clipboardData) return;
 
-            // 检查剪贴板内容：如果有文件（图片），或者有包含图片的HTML，才拦截
+            // 检查剪贴板内容：如果有文件（图片），直接拦截
             const hasImageFiles = clipboardData.files && clipboardData.files.length > 0 && 
                 Array.from(clipboardData.files).some(f => f.type.startsWith('image/'));
             
-            // 检查是否有纯文本内容，如果有纯文本且没有图片文件，不拦截
-            const hasPlainText = clipboardData.types && clipboardData.types.includes('text/plain');
-            
-            if (!hasImageFiles && hasPlainText) {
-                return; // 有纯文本内容，让浏览器默认处理
+            if (hasImageFiles) {
+                e.preventDefault();
+                handleFeishuPaste(clipboardData);
+                return;
             }
 
-            // 只有当有图片文件，或者可能是飞书图片（有HTML但无纯文本）时才拦截
-            e.preventDefault();
-            handleFeishuPaste(clipboardData);
+            // 检查剪贴板数据类型
+            const types = clipboardData.types || [];
+            const hasHtml = types.includes('text/html');
+            const hasPlainText = types.includes('text/plain');
+
+            // 场景1：只有HTML没有纯文本 -> 很可能是飞书图片，直接拦截
+            if (hasHtml && !hasPlainText) {
+                e.preventDefault();
+                handleFeishuPaste(clipboardData);
+                return;
+            }
+
+            // 场景2：同时有HTML和纯文本 -> 需要判断是飞书图片还是表格文本
+            if (hasHtml && hasPlainText) {
+                // 尝试同步获取纯文本内容，判断是否是有效文本
+                let plainText = '';
+                const items = clipboardData.items || [];
+                for (let item of items) {
+                    if (item.kind === 'string' && item.type === 'text/plain') {
+                        // getAsString是同步执行的（回调会立即被调用）
+                        item.getAsString((text) => {
+                            plainText = text;
+                        });
+                        break;
+                    }
+                }
+
+                // 如果纯文本内容为空或只有空白字符，说明是图片单元格，拦截处理
+                if (!plainText || plainText.trim() === '') {
+                    e.preventDefault();
+                    handleFeishuPaste(clipboardData);
+                    return;
+                }
+
+                // 如果纯文本有实际内容，让浏览器默认处理（用户粘贴的是文本）
+                return;
+            }
+
+            // 场景3：只有纯文本 -> 让浏览器默认处理
+            // 场景4：其他情况 -> 不处理
         }
 
         // 核心：处理飞书表格图片粘贴（异步逻辑）
