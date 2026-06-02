@@ -788,36 +788,16 @@
                 // 获取对应格式的图片数据
                 const imageData = await getImageDataByFormat(selectedFormat);
 
-                if ('showSaveFilePicker' in window) {
-                    try {
-                        const fileHandle = await window.showSaveFilePicker({
-                            suggestedName: fullFileName,
-                            types: [{
-                                description: '图片文件',
-                                accept: { [mimeType]: [`.${selectedFormat}`] }
-                            }]
-                        });
-
-                        const blob = base64ToBlob(imageData, mimeType);
-                        const writable = await fileHandle.createWritable();
-                        await writable.write(blob);
-                        await writable.close();
-                        return;
-                    } catch (pickerErr) {
-                        if (pickerErr.name === 'AbortError') {
-                            return;
-                        }
-                        console.warn('文件选择器不可用，使用默认下载方式:', pickerErr);
-                    }
-                }
-
-                // 降级方案：使用a标签下载
+                // 直接使用a标签下载，文件会保存到浏览器默认下载目录
                 const link = document.createElement('a');
                 link.download = fullFileName;
                 link.href = imageData;
+                link.style.display = 'none';
                 document.body.appendChild(link);
                 link.click();
-                document.body.removeChild(link);
+                setTimeout(() => {
+                    document.body.removeChild(link);
+                }, 1000);
             } catch (err) {
                 alert('下载失败，请重试');
                 console.error('下载失败:', err);
