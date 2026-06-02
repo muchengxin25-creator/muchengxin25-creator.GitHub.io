@@ -461,7 +461,8 @@
                     try {
                         const imageData = await convertFeishuImageToBase64(src, loadingId);
                         if (imageData) {
-                            addImageToGallery(imageData, filename);
+                            // 等待图片真正加载完成后再移除加载指示器
+                            await addImageToGallery(imageData, filename);
                         }
                     } catch (err) {
                         // 如果是用户取消的，不显示错误
@@ -579,25 +580,31 @@
             });
         }
 
-        // 添加图片到列表
+        // 添加图片到列表（返回Promise，等待图片真正加载完成）
         function addImageToGallery(imageBase64, filename) {
-            const img = new Image();
-            img.crossOrigin = 'anonymous';
-            img.onload = () => {
-                // 存入图片列表
-                imageList.push({
-                    src: imageBase64,
-                    filename: filename,
-                    width: img.width,
-                    height: img.height,
-                    img: img
-                });
-                // 更新UI
-                updateImageListUI();
-                // 修改：只要有图片就启用拼接按钮（移除≥2的限制）
-                mergeBtn.disabled = imageList.length < 1;
-            };
-            img.src = imageBase64;
+            return new Promise((resolve) => {
+                const img = new Image();
+                img.crossOrigin = 'anonymous';
+                img.onload = () => {
+                    // 存入图片列表
+                    imageList.push({
+                        src: imageBase64,
+                        filename: filename,
+                        width: img.width,
+                        height: img.height,
+                        img: img
+                    });
+                    // 更新UI
+                    updateImageListUI();
+                    // 修改：只要有图片就启用拼接按钮（移除≥2的限制）
+                    mergeBtn.disabled = imageList.length < 1;
+                    resolve();
+                };
+                img.onerror = () => {
+                    resolve(); // 即使加载失败也resolve，避免Promise卡住
+                };
+                img.src = imageBase64;
+            });
         }
 
         // 更新图片列表UI
