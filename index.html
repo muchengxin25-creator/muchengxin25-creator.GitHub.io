@@ -314,6 +314,11 @@
 
         // 核心：处理飞书表格图片粘贴
         async function handleFeishuPaste(e) {
+            const target = e.target;
+            // 如果目标是可编辑元素（输入框、文本域等），不拦截粘贴行为
+            if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
+                return;
+            }
             e.preventDefault();
             const clipboardData = e.clipboardData || window.clipboardData;
             if (!clipboardData) return;
