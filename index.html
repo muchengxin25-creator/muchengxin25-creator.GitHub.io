@@ -125,6 +125,51 @@
         .modal-buttons .cancel-btn:hover {
             background: #73767a;
         }
+        /* 加载状态样式 */
+        .loading-item {
+            padding: 6px 10px;
+            background: #f0f7ff;
+            border: 1px solid #409eff;
+            border-radius: 4px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 14px;
+            color: #409eff;
+        }
+        .loading-spinner {
+            width: 16px;
+            height: 16px;
+            border: 2px solid #e0e0e0;
+            border-top-color: #409eff;
+            border-radius: 50%;
+            animation: spin 0.8s linear infinite;
+        }
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+        .loading-text {
+            color: #666;
+            font-size: 13px;
+        }
+        .loading-cancel {
+            background: #ff4949;
+            color: white;
+            border: none;
+            border-radius: 3px;
+            width: 20px;
+            height: 20px;
+            font-size: 12px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            padding: 0;
+            margin-left: auto;
+        }
+        .loading-cancel:hover {
+            background: #e63e3e;
+        }
     </style>
 </head>
 <body>
@@ -213,6 +258,11 @@
         const modalConfirmBtn = document.getElementById('modal-confirm-btn');
         const formatOptions = document.querySelectorAll('.format-option');
         let selectedFormat = 'png'; // 当前选择的格式
+        // 加载状态管理
+        const loadingImages = new Map(); // id -> { controller, element }
+        let loadingIdCounter = 0;
+        // 加载超时时间（30秒）
+        const LOAD_TIMEOUT = 30000;
 
         // 初始化
         function init() {
@@ -392,16 +442,39 @@
                 const imgMatches = htmlData.match(/<img[^>]*src=["']([^"']+)["']/gi);
                 if (!imgMatches) return;
 
+                // 提取所有图片URL
+                const imageUrls = [];
                 for (const match of imgMatches) {
                     const src = match.match(/src=["']([^"']+)["']/)[1];
                     if (src) {
-                        // 飞书图片处理：URL转Base64（绕开防盗链）
-                        const imageData = await convertFeishuImageToBase64(src);
-                        if (imageData) {
-                            addImageToGallery(imageData, `飞书图片_${Date.now()}.png`);
-                        }
+                        imageUrls.push(src);
                     }
                 }
+
+                if (imageUrls.length === 0) return;
+
+                // 并行加载所有图片
+                const loadPromises = imageUrls.map(async (src, index) => {
+                    const filename = `飞书图片_${Date.now()}_${index + 1}.png`;
+                    const loadingId = addLoadingIndicator(filename);
+
+                    try {
+                        const imageData = await convertFeishuImageToBase64(src, loadingId);
+                        if (imageData) {
+                            addImageToGallery(imageData, filename);
+                        }
+                    } catch (err) {
+                        // 如果是用户取消的，不显示错误
+                        if (err.name !== 'AbortError') {
+                            console.error('图片加载失败:', err);
+                            alert(`图片加载失败：${err.message}`);
+                        }
+                    } finally {
+                        removeLoadingIndicator(loadingId);
+                    }
+                });
+
+                await Promise.all(loadPromises);
             } catch (err) {
                 console.error('粘贴失败:', err);
                 alert('飞书图片粘贴失败，请重试（建议复制单元格图片后直接粘贴）');
@@ -423,7 +496,7 @@
         }
 
         // 飞书图片URL/Base64转可用的Base64（核心解决防盗链）
-        async function convertFeishuImageToBase64(src) {
+        async function convertFeishuImageToBase64(src, loadingId) {
             // 本身是Base64直接返回
             if (src.startsWith('data:image/')) {
                 return src;
@@ -431,23 +504,65 @@
 
             // 飞书URL转Base64（添加referer绕开防盗链）
             if (src.includes('feishu.cn') || src.includes('larksuite.com')) {
-                const response = await fetch(src, {
-                    method: 'GET',
-                    headers: {
-                        'Referer': 'https://www.feishu.cn/', // 关键：添加飞书referer
-                        'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-                    },
-                    mode: 'cors',
-                    cache: 'no-cache'
+                // 获取AbortController用于取消请求
+                const loading = loadingImages.get(loadingId);
+                const signal = loading ? loading.controller.signal : undefined;
+
+                // 创建超时Promise
+                const timeoutPromise = new Promise((_, reject) => {
+                    setTimeout(() => {
+                        reject(new Error('图片加载超时，请重试'));
+                    }, LOAD_TIMEOUT);
                 });
 
-                if (!response.ok) throw new Error('图片获取失败');
-                const blob = await response.blob();
-                return new Promise((resolve) => {
-                    const reader = new FileReader();
-                    reader.onload = () => resolve(reader.result);
-                    reader.readAsDataURL(blob);
-                });
+                // 创建请求Promise
+                const fetchPromise = (async () => {
+                    const response = await fetch(src, {
+                        method: 'GET',
+                        headers: {
+                            'Referer': 'https://www.feishu.cn/', // 关键：添加飞书referer
+                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
+                        },
+                        mode: 'cors',
+                        cache: 'no-cache',
+                        signal: signal
+                    });
+
+                    if (!response.ok) throw new Error('图片获取失败');
+                    
+                    // 使用流式读取更新加载进度
+                    const contentLength = response.headers.get('content-length');
+                    const reader = response.body.getReader();
+                    const chunks = [];
+                    let received = 0;
+
+                    while (true) {
+                        const { done, value } = await reader.read();
+                        if (done) break;
+                        chunks.push(value);
+                        received += value.length;
+                        
+                        // 更新加载状态文本（显示进度）
+                        if (loading && contentLength) {
+                            const percent = Math.round((received / contentLength) * 100);
+                            const textEl = loading.element.querySelector('.loading-text');
+                            if (textEl) {
+                                const filename = textEl.textContent.replace(/正在加载：|（\d+%）/g, '').trim();
+                                textEl.textContent = `正在加载：${filename}（${percent}%）`;
+                            }
+                        }
+                    }
+
+                    const blob = new Blob(chunks, { type: response.headers.get('content-type') || 'image/png' });
+                    return new Promise((resolve) => {
+                        const reader = new FileReader();
+                        reader.onload = () => resolve(reader.result);
+                        reader.readAsDataURL(blob);
+                    });
+                })();
+
+                // Promise.race：超时或取消都会抛出错误
+                return Promise.race([fetchPromise, timeoutPromise]);
             }
 
             return null;
@@ -711,6 +826,8 @@
 
         // 重置全部功能（移除确认提示）
         function resetAll() {
+            // 取消所有正在加载的图片
+            cancelAllLoading();
             // 直接清空，无确认提示
             // 清空图片列表
             imageList.length = 0;
@@ -728,6 +845,58 @@
             resultCtx.clearRect(0, 0, resultCanvas.width, resultCanvas.height);
             // 重置间距输入框
             gapInput.value = 10;
+        }
+
+        // 添加加载指示器
+        function addLoadingIndicator(filename) {
+            const id = ++loadingIdCounter;
+            const loadingEl = document.createElement('div');
+            loadingEl.className = 'loading-item';
+            loadingEl.dataset.loadingId = id;
+            loadingEl.innerHTML = `
+                <div class="loading-spinner"></div>
+                <span class="loading-text">正在加载：${filename}</span>
+                <button class="loading-cancel" title="取消加载">×</button>
+            `;
+            imageListEl.appendChild(loadingEl);
+            
+            // 绑定取消按钮事件
+            loadingEl.querySelector('.loading-cancel').addEventListener('click', () => {
+                cancelLoading(id);
+            });
+            
+            // 创建AbortController用于取消请求
+            const controller = new AbortController();
+            loadingImages.set(id, { controller, element: loadingEl });
+            
+            return id;
+        }
+
+        // 移除加载指示器
+        function removeLoadingIndicator(id) {
+            const loading = loadingImages.get(id);
+            if (loading) {
+                loading.element.remove();
+                loadingImages.delete(id);
+            }
+        }
+
+        // 取消加载
+        function cancelLoading(id) {
+            const loading = loadingImages.get(id);
+            if (loading) {
+                loading.controller.abort();
+                removeLoadingIndicator(id);
+            }
+        }
+
+        // 取消所有加载
+        function cancelAllLoading() {
+            loadingImages.forEach((loading, id) => {
+                loading.controller.abort();
+                loading.element.remove();
+            });
+            loadingImages.clear();
         }
 
         // 启动
