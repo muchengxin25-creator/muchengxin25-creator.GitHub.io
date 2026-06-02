@@ -607,9 +607,26 @@
             });
         }
 
-        // 更新图片列表UI
+        // 更新图片列表UI（保留加载指示器）
         function updateImageListUI() {
+            // 先保存所有加载指示器元素
+            const loadingElements = [];
+            const children = Array.from(imageListEl.children);
+            children.forEach(child => {
+                if (child.classList.contains('loading-item')) {
+                    loadingElements.push(child);
+                }
+            });
+            
+            // 清空列表，但保留加载指示器
             imageListEl.innerHTML = '';
+            
+            // 先重新添加加载指示器
+            loadingElements.forEach(el => {
+                imageListEl.appendChild(el);
+            });
+            
+            // 再添加已加载的图片
             imageList.forEach((item, index) => {
                 const itemEl = document.createElement('div');
                 itemEl.className = 'image-item';
