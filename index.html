@@ -37,8 +37,8 @@
         .hidden { display: none; }
         .tip { color: #ff6600; text-align: center; font-size: 13px; margin: 10px 0; }
         .size-tip { color: #409eff; text-align: center; font-size: 13px; margin: 5px 0; }
-        .size-tip.warning { color: #ff6600; }
         .size-tip.success { color: #52c41a; }
+        .size-tip.warning { color: #ff6600; }
         #reset-btn { background: #666; }
         #reset-btn:hover { background: #444; }
         .modal-overlay {
@@ -169,16 +169,16 @@
             background: #e63e3e;
         }
         .compress-progress {
-            color: #ff6600;
+            color: #409eff;
             font-size: 13px;
             margin-top: 5px;
             padding: 8px;
-            background: #fff7e6;
+            background: #f0f7ff;
             border-radius: 4px;
-            border: 1px solid #ffd9b3;
+            border: 1px solid #b3d8ff;
         }
         .compress-progress .highlight {
-            color: #409eff;
+            color: #ff6600;
             font-weight: bold;
         }
     </style>
@@ -186,7 +186,7 @@
 <body>
     <div class="container">
         <h1>图片拼接工具</h1>
-        <p class="tip">✅ 复制 → 直接粘贴即可使用 | 📌 可拖动调整图片顺序 | 📏 自动压缩大于10MB的图片</p>
+        <p class="tip">✅ 复制 → 直接粘贴即可使用 | 📌 可拖动调整图片顺序 | 📏 优先保证画质，自动压缩至10MB以内</p>
         
         <div class="upload-area" id="upload-area">
             <h3>点击上传图片 | 复制飞书图片后直接粘贴</h3>
@@ -596,20 +596,15 @@
         }
 
         /**
-         * 智能压缩图片到目标大小以下
-         * @param {HTMLCanvasElement} canvas - 源画布
-         * @param {number} targetSizeBytes - 目标大小（字节）
-         * @param {number} minQuality - 最小质量（0.1-1.0）
-         * @param {number} maxQuality - 最大质量（0.1-1.0）
-         * @returns {Promise<{data: string, format: string, quality: number, size: number}>}
+         * 优先保证画质的压缩策略：从高质量开始尝试，找到能满足10MB限制的最高质量
          */
-        function smartCompressImage(canvas, targetSizeBytes = MAX_SIZE_BYTES, minQuality = 0.1, maxQuality = 0.95) {
+        function qualityPriorityCompress(canvas, targetSizeBytes = MAX_SIZE_BYTES) {
             return new Promise((resolve) => {
-                // 先尝试PNG无损格式
+                // 第一步：尝试PNG无损格式
                 const pngData = canvas.toDataURL('image/png', 1.0);
                 const pngSize = getBase64Size(pngData);
                 
-                // 如果PNG已经小于目标大小，直接返回PNG
+                // PNG已经小于目标大小，直接使用PNG（画质最好）
                 if (pngSize <= targetSizeBytes) {
                     resolve({
                         data: pngData,
@@ -621,63 +616,66 @@
                     return;
                 }
 
-                // PNG超过目标大小，使用JPG二分查找最佳质量
-                let low = minQuality;
-                let high = maxQuality;
+                // PNG超过目标大小，使用JPG从高质量开始尝试
+                // 从0.95开始，逐步降低，找到满足大小限制的最高质量
+                const qualitySteps = [0.95, 0.92, 0.88, 0.85, 0.82, 0.78, 0.75, 0.72, 0.68, 0.65, 0.62, 0.58, 0.55, 0.50, 0.45, 0.40, 0.35, 0.30, 0.25, 0.20];
+                
                 let bestResult = null;
-                let attempts = 0;
-                const maxAttempts = 15;
-
-                // 先尝试一个中等质量
-                const tryCompress = (quality) => {
-                    const jpgData = canvas.toDataURL('image/jpeg', quality);
+                
+                for (let i = 0; i < qualitySteps.length; i++) {
+                    const q = qualitySteps[i];
+                    const jpgData = canvas.toDataURL('image/jpeg', q);
                     const size = getBase64Size(jpgData);
-                    return { data: jpgData, format: 'jpg', quality, size };
-                };
-
-                // 二分查找
-                while (low <= high && attempts < maxAttempts) {
-                    attempts++;
-                    const mid = Math.round((low + high) * 100) / 100;
-                    const result = tryCompress(mid);
                     
-                    // 更新进度显示
-                    updateCompressProgress(attempts, maxAttempts, mid, result.size / 1024 / 1024);
+                    // 更新进度
+                    updateCompressProgress(i + 1, qualitySteps.length, q, size / 1024 / 1024);
                     
-                    if (result.size <= targetSizeBytes) {
-                        // 当前质量可以压缩到目标大小，尝试更高质量
-                        bestResult = result;
-                        // 如果质量已经很高，或者大小接近目标，可以停止
-                        if (mid >= maxQuality - 0.01 || result.size > targetSizeBytes * 0.85) {
-                            break;
-                        }
-                        low = Math.round((mid + 0.01) * 100) / 100;
-                    } else {
-                        // 当前质量压缩后仍大于目标，需要更低质量
-                        high = Math.round((mid - 0.01) * 100) / 100;
+                    if (size <= targetSizeBytes) {
+                        // 找到满足条件的最高质量
+                        bestResult = {
+                            data: jpgData,
+                            format: 'jpg',
+                            quality: q,
+                            size: size,
+                            compressed: true
+                        };
+                        break;
+                    }
+                    
+                    // 如果已经到了最低质量还不行，使用最低质量
+                    if (i === qualitySteps.length - 1) {
+                        bestResult = {
+                            data: jpgData,
+                            format: 'jpg',
+                            quality: q,
+                            size: size,
+                            compressed: true
+                        };
                     }
                 }
 
-                // 如果没有找到合适的质量，使用最低质量
+                // 如果还是没找到（理论上不会发生），使用最低质量
                 if (!bestResult) {
-                    bestResult = tryCompress(minQuality);
-                    // 如果最低质量仍然大于目标，那就使用最低质量（实在没办法了）
-                    if (bestResult.size > targetSizeBytes) {
-                        // 最后尝试一次最低质量
-                        bestResult = tryCompress(0.05);
-                    }
+                    const fallbackData = canvas.toDataURL('image/jpeg', 0.15);
+                    bestResult = {
+                        data: fallbackData,
+                        format: 'jpg',
+                        quality: 0.15,
+                        size: getBase64Size(fallbackData),
+                        compressed: true
+                    };
                 }
 
-                bestResult.compressed = true;
                 resolve(bestResult);
             });
         }
 
-        // 更新压缩进度显示
-        function updateCompressProgress(attempt, total, quality, sizeMB) {
+        function updateCompressProgress(current, total, quality, sizeMB) {
             compressProgressEl.classList.remove('hidden');
+            const status = sizeMB <= 10 ? '✅ 已满足' : '⏳ 压缩中';
             compressProgressEl.innerHTML = `
-                🔄 正在压缩图片... 尝试 ${attempt}/${total}，质量：${(quality * 100).toFixed(0)}%，当前大小：${sizeMB.toFixed(2)}MB
+                ${status} 尝试 ${current}/${total}，质量：<span class="highlight">${(quality * 100).toFixed(0)}%</span>，当前大小：<span class="highlight">${sizeMB.toFixed(2)}MB</span>
+                ${sizeMB <= 10 ? ' 🎉 已低于10MB！' : ''}
             `;
         }
 
@@ -714,8 +712,8 @@
             compressProgressEl.classList.add('hidden');
             sizeTipEl.classList.add('hidden');
 
-            // 使用智能压缩
-            const result = await smartCompressImage(resultCanvas, MAX_SIZE_BYTES, 0.08, 0.95);
+            // 使用优先画质的压缩策略
+            const result = await qualityPriorityCompress(resultCanvas, MAX_SIZE_BYTES);
             
             finalImageData = result.data;
             finalImageFormat = result.format;
@@ -727,13 +725,14 @@
             let tipClass = '';
             
             if (result.format === 'png') {
-                sizeTip = `✅ 拼接完成！PNG格式，大小：${sizeMB.toFixed(2)}MB（未压缩）`;
+                sizeTip = `✅ 拼接完成！PNG无损格式，大小：${sizeMB.toFixed(2)}MB（未压缩）`;
                 tipClass = 'success';
             } else if (result.size <= MAX_SIZE_BYTES) {
-                sizeTip = `✅ 拼接完成！JPG格式，大小：${sizeMB.toFixed(2)}MB（已压缩至 ${targetMB}MB 以下）`;
+                const qualityPercent = (result.quality * 100).toFixed(0);
+                sizeTip = `✅ 拼接完成！JPG格式（质量 ${qualityPercent}%），大小：${sizeMB.toFixed(2)}MB（已控制在 ${targetMB}MB 以内）`;
                 tipClass = 'success';
             } else {
-                sizeTip = `⚠️ 图片大小 ${sizeMB.toFixed(2)}MB 仍略大于 ${targetMB}MB，已尽力压缩（可尝试减少图片数量）`;
+                sizeTip = `⚠️ 图片大小 ${sizeMB.toFixed(2)}MB 仍略大于 ${targetMB}MB，已使用最低质量压缩（可尝试减少图片数量）`;
                 tipClass = 'warning';
             }
 
@@ -779,20 +778,17 @@
             }
             // 如果格式不同，重新转换
             if (format === 'jpg') {
-                // 压缩为JPG，质量0.92以保证质量
-                const jpgData = resultCanvas.toDataURL('image/jpeg', 0.92);
-                // 检查JPG大小是否超过10MB，如果超过则进一步压缩
-                let jpgSize = getBase64Size(jpgData);
-                let quality = 0.92;
-                while (jpgSize > MAX_SIZE_BYTES && quality > 0.1) {
-                    quality -= 0.05;
-                    const compressed = resultCanvas.toDataURL('image/jpeg', quality);
-                    jpgSize = getBase64Size(compressed);
-                    if (jpgSize <= MAX_SIZE_BYTES) {
-                        return compressed;
+                // 从高质量开始尝试，保证画质
+                const qualities = [0.95, 0.92, 0.88, 0.85, 0.82, 0.78, 0.75, 0.72, 0.68, 0.65];
+                for (const q of qualities) {
+                    const jpgData = resultCanvas.toDataURL('image/jpeg', q);
+                    const size = getBase64Size(jpgData);
+                    if (size <= MAX_SIZE_BYTES) {
+                        return jpgData;
                     }
                 }
-                return jpgData;
+                // 如果都不行，使用0.6
+                return resultCanvas.toDataURL('image/jpeg', 0.6);
             } else {
                 return resultCanvas.toDataURL('image/png', 1.0);
             }
