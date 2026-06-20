@@ -1,4 +1,3 @@
-      
 <!DOCTYPE html>
 <html lang="zh-CN">
 <head>
@@ -26,8 +25,8 @@
         button:disabled { background: #ccc; cursor: not-allowed; }
         .image-list { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; min-height: 30px; padding: 10px; border: 1px solid #eee; border-radius: 4px; }
         .image-item { padding: 6px 10px; background: #f8f9fa; border: 1px solid #ddd; border-radius: 4px; 
-                      display: flex; align-items: center; gap: 6px; font-size: 14px; cursor: move; /* 拖动光标 */
-                      user-select: none; /* 禁止文字选中 */ transition: all 0.2s; }
+                      display: flex; align-items: center; gap: 6px; font-size: 14px; cursor: move;
+                      user-select: none; transition: all 0.2s; }
         .image-item:hover { background: #f0f7ff; border-color: #409eff; }
         .image-item.dragging { opacity: 0.7; background: #e6f7ff; border-color: #1890ff; }
         .image-item .filename { max-width: 180px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #333; }
@@ -38,10 +37,10 @@
         .hidden { display: none; }
         .tip { color: #ff6600; text-align: center; font-size: 13px; margin: 10px 0; }
         .size-tip { color: #409eff; text-align: center; font-size: 13px; margin: 5px 0; }
-        /* 重置按钮样式 */
+        .size-tip.warning { color: #ff6600; }
+        .size-tip.success { color: #52c41a; }
         #reset-btn { background: #666; }
         #reset-btn:hover { background: #444; }
-        /* 弹窗样式 */
         .modal-overlay {
             position: fixed;
             top: 0;
@@ -125,7 +124,6 @@
         .modal-buttons .cancel-btn:hover {
             background: #73767a;
         }
-        /* 加载状态样式 */
         .loading-item {
             padding: 6px 10px;
             background: #f0f7ff;
@@ -170,6 +168,19 @@
         .loading-cancel:hover {
             background: #e63e3e;
         }
+        .compress-progress {
+            color: #ff6600;
+            font-size: 13px;
+            margin-top: 5px;
+            padding: 8px;
+            background: #fff7e6;
+            border-radius: 4px;
+            border: 1px solid #ffd9b3;
+        }
+        .compress-progress .highlight {
+            color: #409eff;
+            font-weight: bold;
+        }
     </style>
 </head>
 <body>
@@ -191,13 +202,14 @@
                 <input type="number" id="gap" value="10" min="0" max="50" placeholder="px">
             </div>
             <button id="merge-btn" disabled>开始拼接</button>
-            <button id="reset-btn">重置全部</button> <!-- 新增重置按钮 -->
+            <button id="reset-btn">重置全部</button> 
             <button id="download-btn" class="hidden">下载拼接结果</button>
         </div>
 
         <div class="result-area" id="result-area">
             <canvas id="result-canvas" class="result-image hidden"></canvas>
             <div id="size-tip" class="size-tip hidden"></div>
+            <div id="compress-progress" class="compress-progress hidden"></div>
         </div>
     </div>
 
@@ -232,16 +244,13 @@
     <script>
         const imageList = [];
         let resultCtx = null;
-        let finalImageData = null; // 存储最终的图片数据（Base64）
-        let finalImageFormat = 'png'; // 默认格式为PNG
-        // 拖动相关变量
-        let draggingIndex = -1; // 正在拖动的图片索引
-        let dragOverIndex = -1; // 拖动覆盖的图片索引
+        let finalImageData = null;
+        let finalImageFormat = 'png';
+        let draggingIndex = -1;
+        let dragOverIndex = -1;
 
-        // 10MB的字节数（10 * 1024 * 1024）
         const MAX_SIZE_BYTES = 10 * 1024 * 1024;
 
-        // DOM元素
         const uploadArea = document.getElementById('upload-area');
         const fileInput = document.getElementById('file-input');
         const imageListEl = document.getElementById('image-list');
@@ -249,36 +258,28 @@
         const mergeBtn = document.getElementById('merge-btn');
         const downloadBtn = document.getElementById('download-btn');
         const resultCanvas = document.getElementById('result-canvas');
-        const resetBtn = document.getElementById('reset-btn'); // 重置按钮
+        const resetBtn = document.getElementById('reset-btn');
         const sizeTipEl = document.getElementById('size-tip');
-        // 下载弹窗相关
+        const compressProgressEl = document.getElementById('compress-progress');
         const downloadModal = document.getElementById('download-modal');
         const filenameInput = document.getElementById('filename-input');
         const modalCancelBtn = document.getElementById('modal-cancel-btn');
         const modalConfirmBtn = document.getElementById('modal-confirm-btn');
         const formatOptions = document.querySelectorAll('.format-option');
-        let selectedFormat = 'png'; // 当前选择的格式
-        // 加载状态管理
-        const loadingImages = new Map(); // id -> { controller, element }
+        let selectedFormat = 'png';
+        const loadingImages = new Map();
         let loadingIdCounter = 0;
-        // 加载超时时间（30秒）
         const LOAD_TIMEOUT = 30000;
 
-        // 初始化
         function init() {
             resultCtx = resultCanvas.getContext('2d');
             bindAllEvents();
         }
 
-        // 绑定所有事件
         function bindAllEvents() {
-            // 点击上传
             uploadArea.addEventListener('click', () => fileInput.click());
-            // 文件选择
             fileInput.addEventListener('change', (e) => handleFiles(e.target.files));
-            // 核心：处理粘贴（适配飞书格式）
             document.addEventListener('paste', handlePaste);
-            // 拖拽上传
             uploadArea.addEventListener('dragover', (e) => {
                 e.preventDefault();
                 uploadArea.style.background = '#f0f7ff';
@@ -291,14 +292,11 @@
                 uploadArea.style.background = 'white';
                 handleFiles(e.dataTransfer.files);
             });
-            // 拼接/下载/重置
             mergeBtn.addEventListener('click', mergeImages);
             downloadBtn.addEventListener('click', showDownloadModal);
-            resetBtn.addEventListener('click', resetAll); // 绑定重置事件
-            // 下载弹窗事件
+            resetBtn.addEventListener('click', resetAll);
             modalCancelBtn.addEventListener('click', hideDownloadModal);
             modalConfirmBtn.addEventListener('click', confirmDownload);
-            // 格式选择事件
             formatOptions.forEach(option => {
                 option.addEventListener('click', () => {
                     formatOptions.forEach(opt => opt.classList.remove('selected'));
@@ -307,27 +305,21 @@
                     option.querySelector('input[type="radio"]').checked = true;
                 });
             });
-            // 点击弹窗外部关闭
             downloadModal.addEventListener('click', (e) => {
                 if (e.target === downloadModal) {
                     hideDownloadModal();
                 }
             });
-            // 绑定拖动相关事件
             bindDragEvents();
         }
 
-        // 绑定图片拖动事件
         function bindDragEvents() {
             imageListEl.addEventListener('mousedown', (e) => {
                 const item = e.target.closest('.image-item');
                 if (!item) return;
-                
-                // 记录拖动的索引
                 draggingIndex = parseInt(item.querySelector('.remove-btn').dataset.index);
                 item.classList.add('dragging');
                 
-                // 鼠标移动事件（全局）
                 const handleMouseMove = (e) => {
                     e.preventDefault();
                     const hoverItem = document.elementFromPoint(e.clientX, e.clientY)?.closest('.image-item');
@@ -335,37 +327,30 @@
                         dragOverIndex = -1;
                         return;
                     }
-                    // 更新覆盖的索引
                     dragOverIndex = parseInt(hoverItem.querySelector('.remove-btn').dataset.index);
-                    // 交换图片顺序（仅当索引不同时）
                     if (draggingIndex !== -1 && dragOverIndex !== -1 && draggingIndex !== dragOverIndex) {
                         [imageList[draggingIndex], imageList[dragOverIndex]] = [imageList[dragOverIndex], imageList[draggingIndex]];
-                        updateImageListUI(); // 重新渲染列表
-                        draggingIndex = dragOverIndex; // 更新拖动索引（保持拖动状态）
+                        updateImageListUI();
+                        draggingIndex = dragOverIndex;
                     }
                 };
 
-                // 鼠标松开事件（全局）
                 const handleMouseUp = () => {
                     const draggingItem = document.querySelector('.image-item.dragging');
                     if (draggingItem) draggingItem.classList.remove('dragging');
                     draggingIndex = -1;
                     dragOverIndex = -1;
-                    // 移除全局事件
                     document.removeEventListener('mousemove', handleMouseMove);
                     document.removeEventListener('mouseup', handleMouseUp);
                 };
 
-                // 添加全局事件
                 document.addEventListener('mousemove', handleMouseMove);
                 document.addEventListener('mouseup', handleMouseUp);
             });
         }
 
-        // 粘贴事件处理入口（同步执行）
         function handlePaste(e) {
             const target = e.target;
-            // 如果目标是可编辑元素（输入框、文本域等），不拦截粘贴行为
             if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
                 return;
             }
@@ -373,7 +358,6 @@
             const clipboardData = e.clipboardData || window.clipboardData;
             if (!clipboardData) return;
 
-            // 检查剪贴板内容：如果有文件（图片），直接拦截
             const hasImageFiles = clipboardData.files && clipboardData.files.length > 0 && 
                 Array.from(clipboardData.files).some(f => f.type.startsWith('image/'));
             
@@ -383,66 +367,49 @@
                 return;
             }
 
-            // 检查剪贴板数据类型
             const types = clipboardData.types || [];
             const hasHtml = types.includes('text/html');
             const hasPlainText = types.includes('text/plain');
 
-            // 场景1：只有HTML没有纯文本 -> 很可能是飞书图片，直接拦截
             if (hasHtml && !hasPlainText) {
                 e.preventDefault();
                 handleFeishuPaste(clipboardData);
                 return;
             }
 
-            // 场景2：同时有HTML和纯文本 -> 需要判断是飞书图片还是表格文本
             if (hasHtml && hasPlainText) {
-                // 尝试同步获取纯文本内容，判断是否是有效文本
                 let plainText = '';
                 const items = clipboardData.items || [];
                 for (let item of items) {
                     if (item.kind === 'string' && item.type === 'text/plain') {
-                        // getAsString是同步执行的（回调会立即被调用）
                         item.getAsString((text) => {
                             plainText = text;
                         });
                         break;
                     }
                 }
-
-                // 如果纯文本内容为空或只有空白字符，说明是图片单元格，拦截处理
                 if (!plainText || plainText.trim() === '') {
                     e.preventDefault();
                     handleFeishuPaste(clipboardData);
                     return;
                 }
-
-                // 如果纯文本有实际内容，让浏览器默认处理（用户粘贴的是文本）
                 return;
             }
-
-            // 场景3：只有纯文本 -> 让浏览器默认处理
-            // 场景4：其他情况 -> 不处理
         }
 
-        // 核心：处理飞书表格图片粘贴（异步逻辑）
         async function handleFeishuPaste(clipboardData) {
             try {
-                // 1. 优先处理File类型（普通截图/本地图片）
                 if (clipboardData.files && clipboardData.files.length > 0) {
                     handleFiles(clipboardData.files);
                     return;
                 }
 
-                // 2. 解析飞书剪贴板的HTML数据（核心适配逻辑）
                 const htmlData = await getClipboardHtml(clipboardData);
                 if (!htmlData) return;
 
-                // 提取飞书图片的Base64/URL（适配飞书最新格式）
                 const imgMatches = htmlData.match(/<img[^>]*src=["']([^"']+)["']/gi);
                 if (!imgMatches) return;
 
-                // 提取所有图片URL
                 const imageUrls = [];
                 for (const match of imgMatches) {
                     const src = match.match(/src=["']([^"']+)["']/)[1];
@@ -453,7 +420,6 @@
 
                 if (imageUrls.length === 0) return;
 
-                // 并行加载所有图片
                 const loadPromises = imageUrls.map(async (src, index) => {
                     const filename = `飞书图片_${Date.now()}_${index + 1}.png`;
                     const loadingId = addLoadingIndicator(filename);
@@ -461,11 +427,9 @@
                     try {
                         const imageData = await convertFeishuImageToBase64(src, loadingId);
                         if (imageData) {
-                            // 等待图片真正加载完成后再移除加载指示器
                             await addImageToGallery(imageData, filename);
                         }
                     } catch (err) {
-                        // 如果是用户取消的，不显示错误
                         if (err.name !== 'AbortError') {
                             console.error('图片加载失败:', err);
                             alert(`图片加载失败：${err.message}`);
@@ -482,7 +446,6 @@
             }
         }
 
-        // 获取剪贴板中的HTML数据
         function getClipboardHtml(clipboardData) {
             return new Promise((resolve) => {
                 const items = clipboardData.items || [];
@@ -496,32 +459,26 @@
             });
         }
 
-        // 飞书图片URL/Base64转可用的Base64（核心解决防盗链）
         async function convertFeishuImageToBase64(src, loadingId) {
-            // 本身是Base64直接返回
             if (src.startsWith('data:image/')) {
                 return src;
             }
 
-            // 飞书URL转Base64（添加referer绕开防盗链）
             if (src.includes('feishu.cn') || src.includes('larksuite.com')) {
-                // 获取AbortController用于取消请求
                 const loading = loadingImages.get(loadingId);
                 const signal = loading ? loading.controller.signal : undefined;
 
-                // 创建超时Promise
                 const timeoutPromise = new Promise((_, reject) => {
                     setTimeout(() => {
                         reject(new Error('图片加载超时，请重试'));
                     }, LOAD_TIMEOUT);
                 });
 
-                // 创建请求Promise
                 const fetchPromise = (async () => {
                     const response = await fetch(src, {
                         method: 'GET',
                         headers: {
-                            'Referer': 'https://www.feishu.cn/', // 关键：添加飞书referer
+                            'Referer': 'https://www.feishu.cn/',
                             'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
                         },
                         mode: 'cors',
@@ -531,7 +488,6 @@
 
                     if (!response.ok) throw new Error('图片获取失败');
                     
-                    // 使用流式读取更新加载进度
                     const contentLength = response.headers.get('content-length');
                     const reader = response.body.getReader();
                     const chunks = [];
@@ -543,7 +499,6 @@
                         chunks.push(value);
                         received += value.length;
                         
-                        // 更新加载状态文本（显示进度）
                         if (loading && contentLength) {
                             const percent = Math.round((received / contentLength) * 100);
                             const textEl = loading.element.querySelector('.loading-text');
@@ -562,14 +517,12 @@
                     });
                 })();
 
-                // Promise.race：超时或取消都会抛出错误
                 return Promise.race([fetchPromise, timeoutPromise]);
             }
 
             return null;
         }
 
-        // 处理文件（上传/粘贴）
         function handleFiles(files) {
             if (!files || files.length === 0) return;
             Array.from(files).forEach(file => {
@@ -580,13 +533,11 @@
             });
         }
 
-        // 添加图片到列表（返回Promise，等待图片真正加载完成）
         function addImageToGallery(imageBase64, filename) {
             return new Promise((resolve) => {
                 const img = new Image();
                 img.crossOrigin = 'anonymous';
                 img.onload = () => {
-                    // 存入图片列表
                     imageList.push({
                         src: imageBase64,
                         filename: filename,
@@ -594,22 +545,18 @@
                         height: img.height,
                         img: img
                     });
-                    // 更新UI
                     updateImageListUI();
-                    // 修改：只要有图片就启用拼接按钮（移除≥2的限制）
                     mergeBtn.disabled = imageList.length < 1;
                     resolve();
                 };
                 img.onerror = () => {
-                    resolve(); // 即使加载失败也resolve，避免Promise卡住
+                    resolve();
                 };
                 img.src = imageBase64;
             });
         }
 
-        // 更新图片列表UI（保留加载指示器）
         function updateImageListUI() {
-            // 先保存所有加载指示器元素
             const loadingElements = [];
             const children = Array.from(imageListEl.children);
             children.forEach(child => {
@@ -618,15 +565,12 @@
                 }
             });
             
-            // 清空列表，但保留加载指示器
             imageListEl.innerHTML = '';
             
-            // 先重新添加加载指示器
             loadingElements.forEach(el => {
                 imageListEl.appendChild(el);
             });
             
-            // 再添加已加载的图片
             imageList.forEach((item, index) => {
                 const itemEl = document.createElement('div');
                 itemEl.className = 'image-item';
@@ -634,62 +578,113 @@
                     <span class="filename" title="${item.filename}">${item.filename}</span>
                     <button class="remove-btn" data-index="${index}">×</button>
                 `;
-                // 删除图片
                 itemEl.querySelector('.remove-btn').addEventListener('click', (e) => {
                     const idx = parseInt(e.target.dataset.index);
                     imageList.splice(idx, 1);
                     updateImageListUI();
-                    // 修改：删除后只要图片数<1就禁用按钮（移除≥2的限制）
                     mergeBtn.disabled = imageList.length < 1;
                 });
                 imageListEl.appendChild(itemEl);
             });
         }
 
-        // 计算Base64字符串的字节大小
         function getBase64Size(base64Str) {
-            // Base64编码的字符串大小计算：去掉前缀后，长度 * 3/4 - 填充符数量
             const base64WithoutPrefix = base64Str.split(',')[1] || base64Str;
             const padding = (base64WithoutPrefix.match(/=/g) || []).length;
             const sizeInBytes = (base64WithoutPrefix.length * 3 / 4) - padding;
             return sizeInBytes;
         }
 
-        // 将Base64转换为Blob对象
-        function base64ToBlob(base64Str, mimeType) {
-            const base64WithoutPrefix = base64Str.split(',')[1];
-            const byteCharacters = atob(base64WithoutPrefix);
-            const byteArrays = [];
-            for (let offset = 0; offset < byteCharacters.length; offset += 512) {
-                const slice = byteCharacters.slice(offset, offset + 512);
-                const byteNumbers = new Array(slice.length);
-                for (let i = 0; i < slice.length; i++) {
-                    byteNumbers[i] = slice.charCodeAt(i);
-                }
-                const byteArray = new Uint8Array(byteNumbers);
-                byteArrays.push(byteArray);
-            }
-            return new Blob(byteArrays, { type: mimeType });
-        }
-
-        // 压缩图片（转为JPG并调整质量）
-        function compressImageToJpg(canvas, quality = 0.8) {
+        /**
+         * 智能压缩图片到目标大小以下
+         * @param {HTMLCanvasElement} canvas - 源画布
+         * @param {number} targetSizeBytes - 目标大小（字节）
+         * @param {number} minQuality - 最小质量（0.1-1.0）
+         * @param {number} maxQuality - 最大质量（0.1-1.0）
+         * @returns {Promise<{data: string, format: string, quality: number, size: number}>}
+         */
+        function smartCompressImage(canvas, targetSizeBytes = MAX_SIZE_BYTES, minQuality = 0.1, maxQuality = 0.95) {
             return new Promise((resolve) => {
-                // 将Canvas转为JPG格式的Base64
-                const jpgBase64 = canvas.toDataURL('image/jpeg', quality);
-                resolve({
-                    data: jpgBase64,
-                    format: 'jpg'
-                });
+                // 先尝试PNG无损格式
+                const pngData = canvas.toDataURL('image/png', 1.0);
+                const pngSize = getBase64Size(pngData);
+                
+                // 如果PNG已经小于目标大小，直接返回PNG
+                if (pngSize <= targetSizeBytes) {
+                    resolve({
+                        data: pngData,
+                        format: 'png',
+                        quality: 1.0,
+                        size: pngSize,
+                        compressed: false
+                    });
+                    return;
+                }
+
+                // PNG超过目标大小，使用JPG二分查找最佳质量
+                let low = minQuality;
+                let high = maxQuality;
+                let bestResult = null;
+                let attempts = 0;
+                const maxAttempts = 15;
+
+                // 先尝试一个中等质量
+                const tryCompress = (quality) => {
+                    const jpgData = canvas.toDataURL('image/jpeg', quality);
+                    const size = getBase64Size(jpgData);
+                    return { data: jpgData, format: 'jpg', quality, size };
+                };
+
+                // 二分查找
+                while (low <= high && attempts < maxAttempts) {
+                    attempts++;
+                    const mid = Math.round((low + high) * 100) / 100;
+                    const result = tryCompress(mid);
+                    
+                    // 更新进度显示
+                    updateCompressProgress(attempts, maxAttempts, mid, result.size / 1024 / 1024);
+                    
+                    if (result.size <= targetSizeBytes) {
+                        // 当前质量可以压缩到目标大小，尝试更高质量
+                        bestResult = result;
+                        // 如果质量已经很高，或者大小接近目标，可以停止
+                        if (mid >= maxQuality - 0.01 || result.size > targetSizeBytes * 0.85) {
+                            break;
+                        }
+                        low = Math.round((mid + 0.01) * 100) / 100;
+                    } else {
+                        // 当前质量压缩后仍大于目标，需要更低质量
+                        high = Math.round((mid - 0.01) * 100) / 100;
+                    }
+                }
+
+                // 如果没有找到合适的质量，使用最低质量
+                if (!bestResult) {
+                    bestResult = tryCompress(minQuality);
+                    // 如果最低质量仍然大于目标，那就使用最低质量（实在没办法了）
+                    if (bestResult.size > targetSizeBytes) {
+                        // 最后尝试一次最低质量
+                        bestResult = tryCompress(0.05);
+                    }
+                }
+
+                bestResult.compressed = true;
+                resolve(bestResult);
             });
         }
 
-        // 仅纵向拼接（核心逻辑）
+        // 更新压缩进度显示
+        function updateCompressProgress(attempt, total, quality, sizeMB) {
+            compressProgressEl.classList.remove('hidden');
+            compressProgressEl.innerHTML = `
+                🔄 正在压缩图片... 尝试 ${attempt}/${total}，质量：${(quality * 100).toFixed(0)}%，当前大小：${sizeMB.toFixed(2)}MB
+            `;
+        }
+
         async function mergeImages() {
             const gap = parseInt(gapInput.value) || 0;
             const images = imageList.map(item => item.img);
 
-            // 修改：删除图片数≥2的校验逻辑
             if (images.length < 1) {
                 alert('请至少添加1张图片再拼接');
                 return;
@@ -697,7 +692,6 @@
 
             // 计算画布尺寸
             const maxWidth = Math.max(...images.map(img => img.width));
-            // 修改：单张图片时间距为0，多张时正常计算
             const totalHeight = images.reduce((sum, img) => sum + img.height, 0) + (images.length > 1 ? gap * (images.length - 1) : 0);
 
             // 绘制图片
@@ -707,9 +701,8 @@
 
             let y = 0;
             images.forEach(img => {
-                const x = (maxWidth - img.width) / 2; // 水平居中
+                const x = (maxWidth - img.width) / 2;
                 resultCtx.drawImage(img, x, y, img.width, img.height);
-                // 修改：单张图片时不增加间距
                 if (images.length > 1) {
                     y += img.height + gap;
                 } else {
@@ -717,45 +710,51 @@
                 }
             });
 
-            // 第一步：先导出为PNG格式
-            finalImageData = resultCanvas.toDataURL('image/png', 1.0);
-            finalImageFormat = 'png';
-            let imageSize = getBase64Size(finalImageData);
-            let sizeTip = `拼接完成！图片大小：${(imageSize / 1024 / 1024).toFixed(2)}MB（PNG格式）`;
+            // 隐藏之前的提示
+            compressProgressEl.classList.add('hidden');
+            sizeTipEl.classList.add('hidden');
 
-            // 第二步：判断是否超过10MB，如果超过则转为JPG压缩
-            if (imageSize > MAX_SIZE_BYTES) {
-                sizeTip = `PNG格式图片大小${(imageSize / 1024 / 1024).toFixed(2)}MB > 10MB，自动转为JPG格式压缩...`;
-                sizeTipEl.textContent = sizeTip;
-                sizeTipEl.classList.remove('hidden');
-                
-                // 压缩为JPG（质量0.8，可根据需要调整）
-                const compressed = await compressImageToJpg(resultCanvas, 0.8);
-                finalImageData = compressed.data;
-                finalImageFormat = compressed.format;
-                
-                // 重新计算压缩后的大小
-                const compressedSize = getBase64Size(finalImageData);
-                sizeTip = `压缩完成！JPG格式图片大小：${(compressedSize / 1024 / 1024).toFixed(2)}MB（原PNG：${(imageSize / 1024 / 1024).toFixed(2)}MB）`;
+            // 使用智能压缩
+            const result = await smartCompressImage(resultCanvas, MAX_SIZE_BYTES, 0.08, 0.95);
+            
+            finalImageData = result.data;
+            finalImageFormat = result.format;
+            const sizeMB = result.size / 1024 / 1024;
+            const targetMB = MAX_SIZE_BYTES / 1024 / 1024;
+
+            // 构建提示信息
+            let sizeTip = '';
+            let tipClass = '';
+            
+            if (result.format === 'png') {
+                sizeTip = `✅ 拼接完成！PNG格式，大小：${sizeMB.toFixed(2)}MB（未压缩）`;
+                tipClass = 'success';
+            } else if (result.size <= MAX_SIZE_BYTES) {
+                sizeTip = `✅ 拼接完成！JPG格式，大小：${sizeMB.toFixed(2)}MB（已压缩至 ${targetMB}MB 以下）`;
+                tipClass = 'success';
+            } else {
+                sizeTip = `⚠️ 图片大小 ${sizeMB.toFixed(2)}MB 仍略大于 ${targetMB}MB，已尽力压缩（可尝试减少图片数量）`;
+                tipClass = 'warning';
             }
 
-            // 显示结果、下载按钮和大小提示
+            // 显示结果
             resultCanvas.classList.remove('hidden');
             downloadBtn.classList.remove('hidden');
             sizeTipEl.textContent = sizeTip;
+            sizeTipEl.className = `size-tip ${tipClass}`;
             sizeTipEl.classList.remove('hidden');
+            
+            // 隐藏进度
+            compressProgressEl.classList.add('hidden');
         }
 
-        // 显示下载弹窗
         function showDownloadModal() {
             if (!finalImageData) {
                 alert('暂无拼接结果可下载');
                 return;
             }
-            // 设置默认文件名（不带扩展名）
             const defaultName = `飞书图片拼接结果_${Date.now()}`;
             filenameInput.value = defaultName;
-            // 重置格式选择为当前格式
             selectedFormat = finalImageFormat;
             formatOptions.forEach(opt => {
                 if (opt.dataset.format === selectedFormat) {
@@ -766,33 +765,39 @@
                     opt.querySelector('input[type="radio"]').checked = false;
                 }
             });
-            // 显示弹窗
             downloadModal.classList.remove('hidden');
-            // 聚焦到文件名输入框
             setTimeout(() => filenameInput.focus(), 100);
         }
 
-        // 隐藏下载弹窗
         function hideDownloadModal() {
             downloadModal.classList.add('hidden');
         }
 
-        // 获取指定格式的图片数据
         async function getImageDataByFormat(format) {
             if (format === finalImageFormat) {
                 return finalImageData;
             }
-            // 如果格式不同，需要重新转换
+            // 如果格式不同，重新转换
             if (format === 'jpg') {
-                const compressed = await compressImageToJpg(resultCanvas, 0.9);
-                return compressed.data;
+                // 压缩为JPG，质量0.92以保证质量
+                const jpgData = resultCanvas.toDataURL('image/jpeg', 0.92);
+                // 检查JPG大小是否超过10MB，如果超过则进一步压缩
+                let jpgSize = getBase64Size(jpgData);
+                let quality = 0.92;
+                while (jpgSize > MAX_SIZE_BYTES && quality > 0.1) {
+                    quality -= 0.05;
+                    const compressed = resultCanvas.toDataURL('image/jpeg', quality);
+                    jpgSize = getBase64Size(compressed);
+                    if (jpgSize <= MAX_SIZE_BYTES) {
+                        return compressed;
+                    }
+                }
+                return jpgData;
             } else {
-                // 转成PNG
                 return resultCanvas.toDataURL('image/png', 1.0);
             }
         }
 
-        // 确认下载
         async function confirmDownload() {
             let fileName = filenameInput.value.trim();
             if (!fileName) {
@@ -801,18 +806,14 @@
                 return;
             }
 
-            // 移除文件名中的非法字符
             fileName = fileName.replace(/[\\/:*?"<>|]/g, '_');
             const fullFileName = `${fileName}.${selectedFormat}`;
-            const mimeType = selectedFormat === 'jpg' ? 'image/jpeg' : 'image/png';
 
             try {
                 hideDownloadModal();
 
-                // 获取对应格式的图片数据
                 const imageData = await getImageDataByFormat(selectedFormat);
 
-                // 直接使用a标签下载，文件会保存到浏览器默认下载目录
                 const link = document.createElement('a');
                 link.download = fullFileName;
                 link.href = imageData;
@@ -828,30 +829,21 @@
             }
         }
 
-        // 重置全部功能（移除确认提示）
         function resetAll() {
-            // 取消所有正在加载的图片
             cancelAllLoading();
-            // 直接清空，无确认提示
-            // 清空图片列表
             imageList.length = 0;
-            // 重置全局变量
             finalImageData = null;
             finalImageFormat = 'png';
-            // 重置UI
             updateImageListUI();
             mergeBtn.disabled = true;
-            // 隐藏结果、下载按钮和大小提示
             resultCanvas.classList.add('hidden');
             downloadBtn.classList.add('hidden');
             sizeTipEl.classList.add('hidden');
-            // 清空画布
+            compressProgressEl.classList.add('hidden');
             resultCtx.clearRect(0, 0, resultCanvas.width, resultCanvas.height);
-            // 重置间距输入框
             gapInput.value = 10;
         }
 
-        // 添加加载指示器
         function addLoadingIndicator(filename) {
             const id = ++loadingIdCounter;
             const loadingEl = document.createElement('div');
@@ -864,19 +856,16 @@
             `;
             imageListEl.appendChild(loadingEl);
             
-            // 绑定取消按钮事件
             loadingEl.querySelector('.loading-cancel').addEventListener('click', () => {
                 cancelLoading(id);
             });
             
-            // 创建AbortController用于取消请求
             const controller = new AbortController();
             loadingImages.set(id, { controller, element: loadingEl });
             
             return id;
         }
 
-        // 移除加载指示器
         function removeLoadingIndicator(id) {
             const loading = loadingImages.get(id);
             if (loading) {
@@ -885,7 +874,6 @@
             }
         }
 
-        // 取消加载
         function cancelLoading(id) {
             const loading = loadingImages.get(id);
             if (loading) {
@@ -894,7 +882,6 @@
             }
         }
 
-        // 取消所有加载
         function cancelAllLoading() {
             loadingImages.forEach((loading, id) => {
                 loading.controller.abort();
@@ -903,10 +890,7 @@
             loadingImages.clear();
         }
 
-        // 启动
         init();
     </script>
 </body>
 </html>
-
-    
