@@ -5,192 +5,484 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>图片拼接工具</title>
     <style>
-        * { margin: 0; padding: 0; box-sizing: border-box; font-family: Arial, sans-serif; }
-        body { max-width: 1000px; margin: 0 auto; padding: 20px; background: #f5f5f5; }
-        .container { background: white; padding: 25px; border-radius: 8px; box-shadow: 0 2px 8px rgba(0,0,0,0.1); }
-        h1 { text-align: center; color: #333; margin-bottom: 20px; font-size: 22px; }
-        .upload-area { border: 2px dashed #409eff; border-radius: 6px; padding: 30px 15px; text-align: center; 
-                       margin-bottom: 20px; cursor: pointer; transition: all 0.2s; }
-        .upload-area:hover { background: #f0f7ff; }
-        .upload-area h3 { color: #409eff; margin-bottom: 8px; font-size: 18px; }
-        .upload-area p { color: #666; font-size: 14px; }
-        #file-input { display: none; }
-        .controls { display: flex; justify-content: center; align-items: center; gap: 15px; margin-bottom: 20px; flex-wrap: wrap; }
-        .control-group { display: flex; align-items: center; gap: 6px; }
-        label { color: #333; font-size: 14px; }
-        input[type="number"] { padding: 6px 10px; border: 1px solid #ddd; border-radius: 4px; width: 80px; }
-        button { padding: 8px 20px; background: #409eff; color: white; border: none; border-radius: 4px; 
-                 cursor: pointer; font-size: 14px; transition: background 0.2s; }
-        button:hover { background: #337ecc; }
-        button:disabled { background: #ccc; cursor: not-allowed; }
-        .image-list { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 20px; min-height: 30px; padding: 10px; border: 1px solid #eee; border-radius: 4px; }
-        .image-item { padding: 6px 10px; background: #f8f9fa; border: 1px solid #ddd; border-radius: 4px; 
-                      display: flex; align-items: center; gap: 6px; font-size: 14px; cursor: move;
-                      user-select: none; transition: all 0.2s; }
-        .image-item:hover { background: #f0f7ff; border-color: #409eff; }
-        .image-item.dragging { opacity: 0.7; background: #e6f7ff; border-color: #1890ff; }
-        .image-item .filename { max-width: 180px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; color: #333; }
-        .image-item .remove-btn { background: #ff4949; color: white; border: none; border-radius: 3px; width: 20px; height: 20px; 
-                                  font-size: 12px; cursor: pointer; display: flex; align-items: center; justify-content: center; padding: 0; }
-        .result-area { text-align: center; }
-        .result-image { max-width: 100%; border: 1px solid #eee; border-radius: 4px; margin-bottom: 15px; }
-        .hidden { display: none; }
-        .tip { color: #ff6600; text-align: center; font-size: 13px; margin: 10px 0; }
-        .size-tip { color: #409eff; text-align: center; font-size: 13px; margin: 5px 0; }
-        .size-tip.warning { color: #ff6600; }
-        .size-tip.success { color: #52c41a; }
-        #reset-btn { background: #666; }
-        #reset-btn:hover { background: #444; }
+        * {
+            margin: 0;
+            padding: 0;
+            box-sizing: border-box;
+            font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, "Helvetica Neue", Arial, sans-serif;
+        }
+
+        :root {
+            --primary: #409eff;
+            --primary-light: #e8f3ff;
+            --primary-hover: #337ecc;
+            --danger: #ff4d4f;
+            --danger-light: #fff1f0;
+            --success: #52c41a;
+            --warning: #faad14;
+            --gray-100: #f9fafb;
+            --gray-200: #f2f3f5;
+            --gray-300: #e5e6eb;
+            --gray-400: #c9cdd4;
+            --gray-600: #86909c;
+            --gray-800: #4e5969;
+            --gray-900: #1d2129;
+            --radius: 12px;
+            --shadow: 0 6px 20px rgba(0, 0, 0, 0.08);
+            --transition: all 0.25s ease;
+        }
+
+        @media (prefers-color-scheme: dark) {
+            :root {
+                --gray-100: #1d2129;
+                --gray-200: #2e3238;
+                --gray-300: #4e5969;
+                --gray-800: #c9cdd4;
+                --gray-900: #f2f3f5;
+            }
+        }
+
+        body {
+            max-width: 1000px;
+            margin: 30px auto;
+            padding: 0 20px;
+            background: var(--gray-100);
+            color: var(--gray-900);
+            line-height: 1.5;
+        }
+
+        .container {
+            background: #fff;
+            padding: 32px;
+            border-radius: var(--radius);
+            box-shadow: var(--shadow);
+            transition: var(--transition);
+        }
+
+        @media (prefers-color-scheme: dark) {
+            .container {
+                background: #222;
+            }
+        }
+
+        .header {
+            text-align: center;
+            margin-bottom: 24px;
+        }
+
+        .header h1 {
+            font-size: 24px;
+            color: var(--gray-900);
+            margin-bottom: 8px;
+            font-weight: 600;
+        }
+
+        .tip {
+            color: var(--gray-600);
+            font-size: 13px;
+            padding: 8px 12px;
+            background: var(--primary-light);
+            border-radius: 8px;
+            display: inline-block;
+        }
+
+        .upload-area {
+            border: 2px dashed var(--primary);
+            border-radius: var(--radius);
+            padding: 40px 20px;
+            text-align: center;
+            cursor: pointer;
+            transition: var(--transition);
+            background: var(--primary-light);
+            margin-bottom: 24px;
+        }
+
+        .upload-area:hover {
+            background: #d0e8ff;
+            border-color: var(--primary-hover);
+        }
+
+        .upload-area h3 {
+            color: var(--primary);
+            font-size: 18px;
+            margin-bottom: 8px;
+            font-weight: 500;
+        }
+
+        .upload-area p {
+            color: var(--gray-600);
+            font-size: 14px;
+        }
+
+        #file-input {
+            display: none;
+        }
+
+        .image-list {
+            display: flex;
+            flex-wrap: wrap;
+            gap: 10px;
+            padding: 16px;
+            border: 1px solid var(--gray-300);
+            border-radius: var(--radius);
+            min-height: 70px;
+            margin-bottom: 24px;
+            background: var(--gray-100);
+        }
+
+        .image-item {
+            padding: 8px 12px;
+            background: #fff;
+            border: 1px solid var(--gray-300);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            cursor: grab;
+            user-select: none;
+            transition: var(--transition);
+        }
+
+        .image-item:active {
+            cursor: grabbing;
+        }
+
+        .image-item:hover {
+            border-color: var(--primary);
+            background: var(--primary-light);
+            transform: translateY(-1px);
+        }
+
+        .image-item.dragging {
+            opacity: 0.6;
+            background: var(--primary-light);
+            border-color: var(--primary);
+        }
+
+        .image-item .filename {
+            max-width: 160px;
+            white-space: nowrap;
+            overflow: hidden;
+            text-overflow: ellipsis;
+            color: var(--gray-800);
+        }
+
+        .image-item .remove-btn {
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            border: none;
+            background: var(--danger);
+            color: #fff;
+            font-size: 12px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+            transition: var(--transition);
+        }
+
+        .image-item .remove-btn:hover {
+            background: #e63946;
+            transform: scale(1.1);
+        }
+
+        .controls {
+            display: flex;
+            justify-content: center;
+            align-items: center;
+            gap: 16px;
+            margin-bottom: 24px;
+            flex-wrap: wrap;
+        }
+
+        .control-group {
+            display: flex;
+            align-items: center;
+            gap: 8px;
+        }
+
+        .control-group label {
+            font-size: 14px;
+            color: var(--gray-800);
+        }
+
+        input[type="number"] {
+            padding: 8px 12px;
+            border: 1px solid var(--gray-300);
+            border-radius: 8px;
+            width: 90px;
+            outline: none;
+            transition: var(--transition);
+            font-size: 14px;
+        }
+
+        input[type="number"]:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(64, 158, 255, 0.15);
+        }
+
+        button {
+            padding: 10px 20px;
+            border-radius: 8px;
+            border: none;
+            font-size: 14px;
+            font-weight: 500;
+            cursor: pointer;
+            transition: var(--transition);
+            display: inline-flex;
+            align-items: center;
+            justify-content: center;
+            gap: 6px;
+        }
+
+        button.primary {
+            background: var(--primary);
+            color: white;
+        }
+
+        button.primary:hover {
+            background: var(--primary-hover);
+        }
+
+        button.primary:disabled {
+            background: var(--gray-400);
+            cursor: not-allowed;
+            transform: none;
+        }
+
+        button.gray {
+            background: var(--gray-300);
+            color: var(--gray-800);
+        }
+
+        button.gray:hover {
+            background: var(--gray-400);
+        }
+
+        button.danger {
+            background: var(--danger);
+            color: white;
+        }
+
+        button.danger:hover {
+            background: #e63946;
+        }
+
+        .result-area {
+            text-align: center;
+        }
+
+        .result-image {
+            max-width: 100%;
+            border-radius: var(--radius);
+            border: 1px solid var(--gray-300);
+            margin-bottom: 16px;
+            box-shadow: var(--shadow);
+        }
+
+        .hidden {
+            display: none !important;
+        }
+
+        .size-tip {
+            font-size: 13px;
+            padding: 8px 12px;
+            border-radius: 8px;
+            margin: 0 auto 12px;
+            max-width: 90%;
+        }
+
+        .size-tip.success {
+            background: #f6ffed;
+            color: var(--success);
+            border: 1px solid #b7eb8f;
+        }
+
+        .size-tip.warning {
+            background: #fffbe6;
+            color: var(--warning);
+            border: 1px solid #ffeeba;
+        }
+
+        .compress-progress {
+            font-size: 13px;
+            padding: 10px 14px;
+            background: var(--primary-light);
+            color: var(--primary);
+            border-radius: 8px;
+            margin-bottom: 12px;
+            border: 1px solid #bae0ff;
+        }
+
+        /* 加载项 */
+        .loading-item {
+            padding: 8px 12px;
+            background: var(--primary-light);
+            border: 1px solid var(--primary);
+            border-radius: 8px;
+            display: flex;
+            align-items: center;
+            gap: 8px;
+            font-size: 13px;
+            color: var(--primary);
+            animation: fadeIn 0.2s ease;
+        }
+
+        .loading-spinner {
+            width: 16px;
+            height: 16px;
+            border: 2px solid var(--gray-300);
+            border-top-color: var(--primary);
+            border-radius: 50%;
+            animation: spin 0.7s linear infinite;
+        }
+
+        @keyframes spin {
+            to { transform: rotate(360deg); }
+        }
+
+        @keyframes fadeIn {
+            from { opacity: 0; transform: translateY(5px); }
+            to { opacity: 1; transform: translateY(0); }
+        }
+
+        .loading-cancel {
+            margin-left: auto;
+            width: 20px;
+            height: 20px;
+            border-radius: 50%;
+            border: none;
+            background: var(--danger);
+            color: white;
+            font-size: 12px;
+            cursor: pointer;
+            display: flex;
+            align-items: center;
+            justify-content: center;
+        }
+
+        /* 弹窗 */
         .modal-overlay {
             position: fixed;
             top: 0;
             left: 0;
             width: 100%;
             height: 100%;
-            background: rgba(0, 0, 0, 0.5);
+            background: rgba(0, 0, 0, 0.45);
             display: flex;
             align-items: center;
             justify-content: center;
-            z-index: 1000;
+            z-index: 9999;
+            backdrop-filter: blur(2px);
+            animation: fadeIn 0.2s ease;
         }
-        .modal-overlay.hidden { display: none; }
+
+        .modal-overlay.hidden {
+            display: none;
+        }
+
         .modal {
             background: white;
-            padding: 25px;
-            border-radius: 8px;
-            box-shadow: 0 4px 20px rgba(0, 0, 0, 0.2);
-            min-width: 350px;
+            padding: 28px;
+            border-radius: var(--radius);
+            box-shadow: 0 12px 40px rgba(0, 0, 0, 0.15);
+            min-width: 360px;
             max-width: 90%;
+            animation: fadeIn 0.25s ease;
         }
+
+        @media (prefers-color-scheme: dark) {
+            .modal {
+                background: #222;
+            }
+        }
+
         .modal h3 {
-            color: #333;
-            margin-bottom: 20px;
             font-size: 18px;
+            margin-bottom: 20px;
+            color: var(--gray-900);
+            font-weight: 600;
         }
+
         .form-group {
-            margin-bottom: 15px;
+            margin-bottom: 20px;
         }
+
         .form-group label {
             display: block;
-            margin-bottom: 6px;
-            color: #333;
+            margin-bottom: 8px;
+            font-weight: 500;
+            color: var(--gray-800);
             font-size: 14px;
-            font-weight: bold;
         }
+
         .form-group input[type="text"] {
             width: 100%;
-            padding: 8px 12px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
+            padding: 10px 14px;
+            border: 1px solid var(--gray-300);
+            border-radius: 8px;
             font-size: 14px;
-            box-sizing: border-box;
+            outline: none;
+            transition: var(--transition);
         }
+
+        .form-group input[type="text"]:focus {
+            border-color: var(--primary);
+            box-shadow: 0 0 0 3px rgba(64, 158, 255, 0.15);
+        }
+
         .format-options {
             display: flex;
-            gap: 15px;
+            gap: 12px;
             margin-top: 8px;
         }
+
         .format-option {
+            flex: 1;
             display: flex;
             align-items: center;
+            justify-content: center;
             gap: 6px;
+            padding: 10px;
+            border: 1px solid var(--gray-300);
+            border-radius: 8px;
             cursor: pointer;
-            padding: 8px 12px;
-            border: 1px solid #ddd;
-            border-radius: 4px;
-            transition: all 0.2s;
+            transition: var(--transition);
+            font-size: 14px;
         }
+
         .format-option:hover {
-            border-color: #409eff;
-            background: #f0f7ff;
+            border-color: var(--primary);
+            background: var(--primary-light);
         }
+
         .format-option.selected {
-            border-color: #409eff;
-            background: #e6f7ff;
+            border-color: var(--primary);
+            background: var(--primary-light);
+            color: var(--primary);
+            font-weight: 500;
         }
-        .format-option input[type="radio"] {
-            margin: 0;
-            cursor: pointer;
-        }
+
         .modal-buttons {
             display: flex;
             justify-content: flex-end;
-            gap: 10px;
-            margin-top: 20px;
-        }
-        .modal-buttons .cancel-btn {
-            background: #909399;
-        }
-        .modal-buttons .cancel-btn:hover {
-            background: #73767a;
-        }
-        .loading-item {
-            padding: 6px 10px;
-            background: #f0f7ff;
-            border: 1px solid #409eff;
-            border-radius: 4px;
-            display: flex;
-            align-items: center;
-            gap: 8px;
-            font-size: 14px;
-            color: #409eff;
-        }
-        .loading-spinner {
-            width: 16px;
-            height: 16px;
-            border: 2px solid #e0e0e0;
-            border-top-color: #409eff;
-            border-radius: 50%;
-            animation: spin 0.8s linear infinite;
-        }
-        @keyframes spin {
-            to { transform: rotate(360deg); }
-        }
-        .loading-text {
-            color: #666;
-            font-size: 13px;
-        }
-        .loading-cancel {
-            background: #ff4949;
-            color: white;
-            border: none;
-            border-radius: 3px;
-            width: 20px;
-            height: 20px;
-            font-size: 12px;
-            cursor: pointer;
-            display: flex;
-            align-items: center;
-            justify-content: center;
-            padding: 0;
-            margin-left: auto;
-        }
-        .loading-cancel:hover {
-            background: #e63e3e;
-        }
-        .compress-progress {
-            color: #ff6600;
-            font-size: 13px;
-            margin-top: 5px;
-            padding: 8px;
-            background: #fff7e6;
-            border-radius: 4px;
-            border: 1px solid #ffd9b3;
-        }
-        .compress-progress .highlight {
-            color: #409eff;
-            font-weight: bold;
+            gap: 12px;
+            margin-top: 24px;
         }
     </style>
 </head>
 <body>
     <div class="container">
-        <h1>图片拼接工具</h1>
-        <p class="tip">✅ 复制 → 直接粘贴即可使用 | 📌 可拖动调整图片顺序 | 📏 自动压缩大于10MB的图片</p>
-        
+        <div class="header">
+            <h1>🖼️ 图片拼接工具</h1>
+            <p class="tip">✅ 复制后直接粘贴 | 📌 拖拽调整顺序 | 📏 自动压缩超大图 | 🚀 纯本地安全使用</p>
+        </div>
+
         <div class="upload-area" id="upload-area">
-            <h3>点击上传图片 | 复制飞书图片后直接粘贴</h3>
-            <p>支持多张图片，粘贴/上传后可删除不需要的图片</p>
+            <h3>点击 / 粘贴 / 拖拽上传图片</h3>
+            <p>支持多张图片，上传后可删除、排序</p>
             <input type="file" id="file-input" accept="image/*" multiple>
         </div>
 
@@ -201,42 +493,42 @@
                 <label>图片间距：</label>
                 <input type="number" id="gap" value="10" min="0" max="50" placeholder="px">
             </div>
-            <button id="merge-btn" disabled>开始拼接</button>
-            <button id="reset-btn">重置全部</button> 
-            <button id="download-btn" class="hidden">下载拼接结果</button>
+            <button id="merge-btn" class="primary" disabled>开始拼接</button>
+            <button id="reset-btn" class="gray">重置全部</button>
+            <button id="download-btn" class="primary hidden">下载结果</button>
         </div>
 
         <div class="result-area" id="result-area">
-            <canvas id="result-canvas" class="result-image hidden"></canvas>
-            <div id="size-tip" class="size-tip hidden"></div>
             <div id="compress-progress" class="compress-progress hidden"></div>
+            <div id="size-tip" class="size-tip hidden"></div>
+            <canvas id="result-canvas" class="result-image hidden"></canvas>
         </div>
     </div>
 
     <!-- 下载弹窗 -->
     <div class="modal-overlay hidden" id="download-modal">
         <div class="modal">
-            <h3>下载图片</h3>
+            <h3>保存拼接图片</h3>
             <div class="form-group">
-                <label for="filename-input">文件名：</label>
+                <label for="filename-input">文件名称</label>
                 <input type="text" id="filename-input" placeholder="请输入文件名">
             </div>
             <div class="form-group">
-                <label>图片格式：</label>
+                <label>图片格式</label>
                 <div class="format-options">
                     <label class="format-option selected" data-format="png">
                         <input type="radio" name="format" value="png" checked>
-                        PNG（无损）
+                        PNG（无损清晰）
                     </label>
                     <label class="format-option" data-format="jpg">
                         <input type="radio" name="format" value="jpg">
-                        JPG（体积小）
+                        JPG（体积更小）
                     </label>
                 </div>
             </div>
             <div class="modal-buttons">
-                <button class="cancel-btn" id="modal-cancel-btn">取消</button>
-                <button id="modal-confirm-btn">确认下载</button>
+                <button class="gray cancel-btn" id="modal-cancel-btn">取消</button>
+                <button class="primary" id="modal-confirm-btn">确认保存</button>
             </div>
         </div>
     </div>
@@ -246,13 +538,13 @@
         let resultCtx = null;
         let finalImageData = null;
         let finalImageFormat = 'png';
-        let draggingIndex = -1;
-        let dragOverIndex = -1;
+        let isMerging = false;
 
         const MAX_SIZE_BYTES = 10 * 1024 * 1024;
         const MAX_SINGLE_IMAGE_WIDTH = 3000;
         const MAX_SINGLE_IMAGE_HEIGHT = 4000;
-        const MAX_TOTAL_PIXELS = 20000000;
+        const LOAD_TIMEOUT = 30000;
+        const MAX_CONCURRENT_LOAD = 4;
 
         const uploadArea = document.getElementById('upload-area');
         const fileInput = document.getElementById('file-input');
@@ -269,10 +561,11 @@
         const modalCancelBtn = document.getElementById('modal-cancel-btn');
         const modalConfirmBtn = document.getElementById('modal-confirm-btn');
         const formatOptions = document.querySelectorAll('.format-option');
+
         let selectedFormat = 'png';
         const loadingImages = new Map();
         let loadingIdCounter = 0;
-        const LOAD_TIMEOUT = 30000;
+        let activeLoads = 0;
 
         function init() {
             resultCtx = resultCanvas.getContext('2d');
@@ -283,23 +576,18 @@
             uploadArea.addEventListener('click', () => fileInput.click());
             fileInput.addEventListener('change', (e) => handleFiles(e.target.files));
             document.addEventListener('paste', handlePaste);
-            uploadArea.addEventListener('dragover', (e) => {
-                e.preventDefault();
-                uploadArea.style.background = '#f0f7ff';
-            });
-            uploadArea.addEventListener('dragleave', () => {
-                uploadArea.style.background = 'white';
-            });
-            uploadArea.addEventListener('drop', (e) => {
-                e.preventDefault();
-                uploadArea.style.background = 'white';
-                handleFiles(e.dataTransfer.files);
-            });
             mergeBtn.addEventListener('click', mergeImages);
             downloadBtn.addEventListener('click', showDownloadModal);
             resetBtn.addEventListener('click', resetAll);
             modalCancelBtn.addEventListener('click', hideDownloadModal);
             modalConfirmBtn.addEventListener('click', confirmDownload);
+
+            uploadArea.addEventListener('dragover', e => e.preventDefault());
+            uploadArea.addEventListener('drop', e => {
+                e.preventDefault();
+                handleFiles(e.dataTransfer.files);
+            });
+
             formatOptions.forEach(option => {
                 option.addEventListener('click', () => {
                     formatOptions.forEach(opt => opt.classList.remove('selected'));
@@ -308,696 +596,286 @@
                     option.querySelector('input[type="radio"]').checked = true;
                 });
             });
-            downloadModal.addEventListener('click', (e) => {
-                if (e.target === downloadModal) {
-                    hideDownloadModal();
-                }
-            });
-            bindDragEvents();
+
+            downloadModal.addEventListener('click', e => e.target === downloadModal && hideDownloadModal());
+            initDragSort();
         }
 
-        function bindDragEvents() {
-            imageListEl.addEventListener('mousedown', (e) => {
+        function initDragSort() {
+            let draggedItem = null;
+
+            imageListEl.addEventListener('mousedown', e => {
                 const item = e.target.closest('.image-item');
                 if (!item) return;
-                draggingIndex = parseInt(item.querySelector('.remove-btn').dataset.index);
+                draggedItem = item;
                 item.classList.add('dragging');
-                
-                const handleMouseMove = (e) => {
-                    e.preventDefault();
-                    const hoverItem = document.elementFromPoint(e.clientX, e.clientY)?.closest('.image-item');
-                    if (!hoverItem) {
-                        dragOverIndex = -1;
-                        return;
-                    }
-                    dragOverIndex = parseInt(hoverItem.querySelector('.remove-btn').dataset.index);
-                    if (draggingIndex !== -1 && dragOverIndex !== -1 && draggingIndex !== dragOverIndex) {
-                        [imageList[draggingIndex], imageList[dragOverIndex]] = [imageList[dragOverIndex], imageList[draggingIndex]];
+            });
+
+            document.addEventListener('mousemove', e => {
+                if (!draggedItem) return;
+                const target = document.elementFromPoint(e.clientX, e.clientY);
+                const dropItem = target?.closest('.image-item');
+                if (dropItem && dropItem !== draggedItem) {
+                    const items = Array.from(imageListEl.children).filter(i => i.classList.contains('image-item'));
+                    const oldIndex = items.indexOf(draggedItem);
+                    const newIndex = items.indexOf(dropItem);
+                    if (oldIndex !== newIndex) {
+                        const temp = imageList[oldIndex];
+                        imageList[oldIndex] = imageList[newIndex];
+                        imageList[newIndex] = temp;
                         updateImageListUI();
-                        draggingIndex = dragOverIndex;
+                        draggedItem = document.querySelectorAll('.image-item')[newIndex];
+                        draggedItem.classList.add('dragging');
                     }
-                };
+                }
+            });
 
-                const handleMouseUp = () => {
-                    const draggingItem = document.querySelector('.image-item.dragging');
-                    if (draggingItem) draggingItem.classList.remove('dragging');
-                    draggingIndex = -1;
-                    dragOverIndex = -1;
-                    document.removeEventListener('mousemove', handleMouseMove);
-                    document.removeEventListener('mouseup', handleMouseUp);
-                };
-
-                document.addEventListener('mousemove', handleMouseMove);
-                document.addEventListener('mouseup', handleMouseUp);
+            document.addEventListener('mouseup', () => {
+                if (draggedItem) {
+                    draggedItem.classList.remove('dragging');
+                    draggedItem = null;
+                }
             });
         }
 
         function handlePaste(e) {
-            const target = e.target;
-            if (target.tagName === 'INPUT' || target.tagName === 'TEXTAREA' || target.isContentEditable) {
-                return;
-            }
+            const tag = e.target.tagName;
+            if (tag === 'INPUT' || tag === 'TEXTAREA' || e.target.isContentEditable) return;
 
-            const clipboardData = e.clipboardData || window.clipboardData;
-            if (!clipboardData) return;
-
-            const hasImageFiles = clipboardData.files && clipboardData.files.length > 0 && 
-                Array.from(clipboardData.files).some(f => f.type.startsWith('image/'));
-            
-            if (hasImageFiles) {
+            const files = e.clipboardData?.files;
+            if (files && files.length) {
                 e.preventDefault();
-                handleFeishuPaste(clipboardData);
-                return;
+                handleFiles(files);
             }
+        }
 
-            const types = clipboardData.types || [];
-            const hasHtml = types.includes('text/html');
-            const hasPlainText = types.includes('text/plain');
+        async function handleFiles(files) {
+            if (!files?.length) return;
+            const validFiles = Array.from(files).filter(f => f.type.startsWith('image/'));
 
-            if (hasHtml && !hasPlainText) {
-                e.preventDefault();
-                handleFeishuPaste(clipboardData);
-                return;
+            for (const file of validFiles) {
+                while (activeLoads >= MAX_CONCURRENT_LOAD) await new Promise(r => setTimeout(r, 100));
+                loadImageFile(file);
             }
+        }
 
-            if (hasHtml && hasPlainText) {
-                let plainText = '';
-                const items = clipboardData.items || [];
-                for (let item of items) {
-                    if (item.kind === 'string' && item.type === 'text/plain') {
-                        item.getAsString((text) => {
-                            plainText = text;
-                        });
-                        break;
-                    }
+        function loadImageFile(file) {
+            activeLoads++;
+            const reader = new FileReader();
+            const loadingId = addLoadingIndicator(file.name);
+
+            reader.onload = async e => {
+                try {
+                    await addImage(e.target.result, file.name);
+                } catch (err) {
+                    console.error('加载失败', err);
+                } finally {
+                    removeLoadingIndicator(loadingId);
+                    activeLoads--;
                 }
-                if (!plainText || plainText.trim() === '') {
-                    e.preventDefault();
-                    handleFeishuPaste(clipboardData);
-                    return;
-                }
-                return;
-            }
+            };
+
+            reader.onerror = () => {
+                removeLoadingIndicator(loadingId);
+                activeLoads--;
+            };
+
+            reader.readAsDataURL(file);
         }
 
-        async function handleFeishuPaste(clipboardData) {
-            try {
-                if (clipboardData.files && clipboardData.files.length > 0) {
-                    handleFiles(clipboardData.files);
-                    return;
-                }
-
-                const htmlData = await getClipboardHtml(clipboardData);
-                if (!htmlData) return;
-
-                const imgMatches = htmlData.match(/<img[^>]*src=["']([^"']+)["']/gi);
-                if (!imgMatches) return;
-
-                const imageUrls = [];
-                for (const match of imgMatches) {
-                    const src = match.match(/src=["']([^"']+)["']/)[1];
-                    if (src) {
-                        imageUrls.push(src);
-                    }
-                }
-
-                if (imageUrls.length === 0) return;
-
-                const loadPromises = imageUrls.map(async (src, index) => {
-                    const filename = `飞书图片_${Date.now()}_${index + 1}.png`;
-                    const loadingId = addLoadingIndicator(filename);
-
-                    try {
-                        const imageData = await convertFeishuImageToBase64(src, loadingId);
-                        if (imageData) {
-                            await addImageToGallery(imageData, filename);
-                        }
-                    } catch (err) {
-                        if (err.name !== 'AbortError') {
-                            console.error('图片加载失败:', err);
-                            alert(`图片加载失败：${err.message}`);
-                        }
-                    } finally {
-                        removeLoadingIndicator(loadingId);
-                    }
-                });
-
-                await Promise.all(loadPromises);
-            } catch (err) {
-                console.error('粘贴失败:', err);
-                alert('飞书图片粘贴失败，请重试（建议复制单元格图片后直接粘贴）');
-            }
-        }
-
-        function getClipboardHtml(clipboardData) {
-            return new Promise((resolve) => {
-                const items = clipboardData.items || [];
-                for (let item of items) {
-                    if (item.kind === 'string' && item.type === 'text/html') {
-                        item.getAsString(resolve);
-                        return;
-                    }
-                }
-                resolve(null);
-            });
-        }
-
-        async function convertFeishuImageToBase64(src, loadingId) {
-            if (src.startsWith('data:image/')) {
-                return src;
-            }
-
-            if (src.includes('feishu.cn') || src.includes('larksuite.com')) {
-                const loading = loadingImages.get(loadingId);
-                const signal = loading ? loading.controller.signal : undefined;
-
-                const timeoutPromise = new Promise((_, reject) => {
-                    setTimeout(() => {
-                        reject(new Error('图片加载超时，请重试'));
-                    }, LOAD_TIMEOUT);
-                });
-
-                const fetchPromise = (async () => {
-                    const response = await fetch(src, {
-                        method: 'GET',
-                        headers: {
-                            'Referer': 'https://www.feishu.cn/',
-                            'User-Agent': 'Mozilla/5.0 (Windows NT 10.0; Win64; x64) AppleWebKit/537.36'
-                        },
-                        mode: 'cors',
-                        cache: 'no-cache',
-                        signal: signal
-                    });
-
-                    if (!response.ok) throw new Error('图片获取失败');
-                    
-                    const contentLength = response.headers.get('content-length');
-                    const reader = response.body.getReader();
-                    const chunks = [];
-                    let received = 0;
-
-                    while (true) {
-                        const { done, value } = await reader.read();
-                        if (done) break;
-                        chunks.push(value);
-                        received += value.length;
-                        
-                        if (loading && contentLength) {
-                            const percent = Math.round((received / contentLength) * 100);
-                            const textEl = loading.element.querySelector('.loading-text');
-                            if (textEl) {
-                                const filename = textEl.textContent.replace(/正在加载：|（\d+%）/g, '').trim();
-                                textEl.textContent = `正在加载：${filename}（${percent}%）`;
-                            }
-                        }
-                    }
-
-                    const blob = new Blob(chunks, { type: response.headers.get('content-type') || 'image/png' });
-                    return new Promise((resolve) => {
-                        const reader = new FileReader();
-                        reader.onload = () => resolve(reader.result);
-                        reader.readAsDataURL(blob);
-                    });
-                })();
-
-                return Promise.race([fetchPromise, timeoutPromise]);
-            }
-
-            return null;
-        }
-
-        function handleFiles(files) {
-            if (!files || files.length === 0) return;
-            Array.from(files).forEach(file => {
-                if (!file.type.startsWith('image/')) return;
-                const reader = new FileReader();
-                reader.onload = (e) => addImageToGallery(e.target.result, file.name);
-                reader.readAsDataURL(file);
-            });
-        }
-
-        function resizeImage(img, maxWidth, maxHeight) {
-            let width = img.width;
-            let height = img.height;
-
-            const widthRatio = maxWidth / width;
-            const heightRatio = maxHeight / height;
-            const scale = Math.min(widthRatio, heightRatio);
-
-            if (scale >= 1) {
-                return { img: img, width: width, height: height, scaled: false };
-            }
-
-            const newWidth = Math.floor(width * scale);
-            const newHeight = Math.floor(height * scale);
-
-            const tempCanvas = document.createElement('canvas');
-            tempCanvas.width = newWidth;
-            tempCanvas.height = newHeight;
-            const ctx = tempCanvas.getContext('2d');
-            ctx.imageSmoothingEnabled = true;
-            ctx.imageSmoothingQuality = 'high';
-            ctx.drawImage(img, 0, 0, newWidth, newHeight);
-
-            const resizedImg = new Image();
-            resizedImg.src = tempCanvas.toDataURL('image/png');
-
-            return { img: resizedImg, width: newWidth, height: newHeight, scaled: true };
-        }
-
-        function addImageToGallery(imageBase64, filename) {
+        function addImage(base64, name) {
             return new Promise((resolve) => {
                 const img = new Image();
-                img.crossOrigin = 'anonymous';
                 img.onload = () => {
-                    const resized = resizeImage(img, MAX_SINGLE_IMAGE_WIDTH, MAX_SINGLE_IMAGE_HEIGHT);
+                    const ratio = Math.min(MAX_SINGLE_IMAGE_WIDTH / img.width, MAX_SINGLE_IMAGE_HEIGHT / img.height, 1);
+                    const w = Math.floor(img.width * ratio);
+                    const h = Math.floor(img.height * ratio);
 
-                    imageList.push({
-                        src: resized.img.src,
-                        filename: filename,
-                        width: resized.width,
-                        height: resized.height,
-                        img: resized.img,
-                        originalWidth: img.width,
-                        originalHeight: img.height,
-                        scaled: resized.scaled
-                    });
+                    if (ratio < 1) {
+                        const c = document.createElement('canvas');
+                        c.width = w; c.height = h;
+                        const ctx = c.getContext('2d');
+                        ctx.drawImage(img, 0, 0, w, h);
+                        img.src = c.toDataURL();
+                    }
+
+                    imageList.push({ src: img.src, filename: name, width: w, height: h, img });
                     updateImageListUI();
                     mergeBtn.disabled = imageList.length < 1;
                     resolve();
                 };
-                img.onerror = () => {
-                    resolve();
-                };
-                img.src = imageBase64;
+                img.src = base64;
             });
         }
 
         function updateImageListUI() {
-            const loadingElements = [];
-            const children = Array.from(imageListEl.children);
-            children.forEach(child => {
-                if (child.classList.contains('loading-item')) {
-                    loadingElements.push(child);
-                }
-            });
-            
+            const loaders = Array.from(imageListEl.children).filter(c => c.classList.contains('loading-item'));
             imageListEl.innerHTML = '';
-            
-            loadingElements.forEach(el => {
-                imageListEl.appendChild(el);
-            });
-            
-            imageList.forEach((item, index) => {
-                const itemEl = document.createElement('div');
-                itemEl.className = 'image-item';
-                itemEl.innerHTML = `
+            loaders.forEach(el => imageListEl.appendChild(el));
+
+            imageList.forEach((item, i) => {
+                const div = document.createElement('div');
+                div.className = 'image-item';
+                div.innerHTML = `
                     <span class="filename" title="${item.filename}">${item.filename}</span>
-                    <button class="remove-btn" data-index="${index}">×</button>
+                    <button class="remove-btn" data-i="${i}">×</button>
                 `;
-                itemEl.querySelector('.remove-btn').addEventListener('click', (e) => {
-                    const idx = parseInt(e.target.dataset.index);
-                    imageList.splice(idx, 1);
+                div.querySelector('.remove-btn').onclick = e => {
+                    imageList.splice(+e.target.dataset.i, 1);
                     updateImageListUI();
                     mergeBtn.disabled = imageList.length < 1;
-                });
-                imageListEl.appendChild(itemEl);
+                };
+                imageListEl.appendChild(div);
             });
         }
 
-        function getBase64Size(base64Str) {
-            const base64WithoutPrefix = base64Str.split(',')[1] || base64Str;
-            const padding = (base64WithoutPrefix.match(/=/g) || []).length;
-            const sizeInBytes = (base64WithoutPrefix.length * 3 / 4) - padding;
-            return sizeInBytes;
+        function addLoadingIndicator(name) {
+            const id = ++loadingIdCounter;
+            const el = document.createElement('div');
+            el.className = 'loading-item';
+            el.innerHTML = `
+                <div class="loading-spinner"></div>
+                <span>加载中：${name}</span>
+                <button class="loading-cancel">×</button>
+            `;
+            imageListEl.appendChild(el);
+            const ctrl = new AbortController();
+            loadingImages.set(id, { ctrl, el });
+            el.querySelector('.loading-cancel').onclick = () => {
+                ctrl.abort(); el.remove(); loadingImages.delete(id);
+            };
+            return id;
+        }
+
+        function removeLoadingIndicator(id) {
+            const item = loadingImages.get(id);
+            if (item) { item.el.remove(); loadingImages.delete(id); }
+        }
+
+        function getBase64Size(b64) {
+            const str = b64.split(',')[1] || b64;
+            return (str.length * 3 / 4) - (str.match(/=/g) || []).length;
         }
 
         function scaleCanvas(canvas, scale) {
-            const newWidth = Math.floor(canvas.width * scale);
-            const newHeight = Math.floor(canvas.height * scale);
-            
-            const tempCanvas = document.createElement('canvas');
-            tempCanvas.width = newWidth;
-            tempCanvas.height = newHeight;
-            const ctx = tempCanvas.getContext('2d');
-            ctx.imageSmoothingEnabled = true;
-            ctx.imageSmoothingQuality = 'high';
-            ctx.drawImage(canvas, 0, 0, newWidth, newHeight);
-            
-            return tempCanvas;
+            const w = Math.floor(canvas.width * scale);
+            const h = Math.floor(canvas.height * scale);
+            const c = document.createElement('canvas');
+            c.width = w; c.height = h;
+            const ctx = c.getContext('2d');
+            ctx.drawImage(canvas, 0, 0, w, h);
+            return c;
         }
 
-        /**
-         * 智能压缩图片到目标大小以下
-         * @param {HTMLCanvasElement} canvas - 源画布
-         * @param {number} targetSizeBytes - 目标大小（字节）
-         * @param {number} minQuality - 最小质量（0.1-1.0）
-         * @param {number} maxQuality - 最大质量（0.1-1.0）
-         * @returns {Promise<{data: string, format: string, quality: number, size: number, scaled: boolean}>}
-         */
-        function smartCompressImage(canvas, targetSizeBytes = MAX_SIZE_BYTES, minQuality = 0.1, maxQuality = 0.95) {
-            return new Promise((resolve) => {
-                let currentCanvas = canvas;
-                let scale = 1.0;
-                let attempts = 0;
-                let totalAttempts = 0;
+        async function smartCompress(canvas) {
+            const png = canvas.toDataURL('image/png');
+            const pngSize = getBase64Size(png);
+            if (pngSize <= MAX_SIZE_BYTES) return { data: png, format: 'png', size: pngSize, compressed: false };
 
-                const tryCompressWithQuality = (quality) => {
-                    const jpgData = currentCanvas.toDataURL('image/jpeg', quality);
-                    const size = getBase64Size(jpgData);
-                    return { data: jpgData, format: 'jpg', quality, size };
-                };
+            let current = canvas;
+            let quality = 0.9;
+            let res = null;
 
-                const binarySearchQuality = (low, high) => {
-                    let bestResult = null;
-                    const maxQualityAttempts = 10;
-                    let qAttempts = 0;
-
-                    while (low <= high && qAttempts < maxQualityAttempts) {
-                        qAttempts++;
-                        attempts++;
-                        totalAttempts++;
-                        const mid = Math.round((low + high) * 100) / 100;
-                        const result = tryCompressWithQuality(mid);
-
-                        updateCompressProgress(attempts, totalAttempts + 10, mid, result.size / 1024 / 1024, scale);
-
-                        if (result.size <= targetSizeBytes) {
-                            bestResult = result;
-                            if (mid >= maxQuality - 0.01 || result.size > targetSizeBytes * 0.85) {
-                                break;
-                            }
-                            low = Math.round((mid + 0.01) * 100) / 100;
-                        } else {
-                            high = Math.round((mid - 0.01) * 100) / 100;
-                        }
-                    }
-
-                    return bestResult;
-                };
-
-                const pngData = currentCanvas.toDataURL('image/png', 1.0);
-                const pngSize = getBase64Size(pngData);
-
-                if (pngSize <= targetSizeBytes) {
-                    resolve({
-                        data: pngData,
-                        format: 'png',
-                        quality: 1.0,
-                        size: pngSize,
-                        compressed: false,
-                        scaled: false,
-                        scale: 1.0
-                    });
-                    return;
+            while (quality > 0.1) {
+                const jpg = current.toDataURL('image/jpeg', quality);
+                const size = getBase64Size(jpg);
+                if (size <= MAX_SIZE_BYTES) {
+                    res = { data: jpg, format: 'jpg', size, compressed: true, quality };
+                    break;
                 }
-
-                let bestResult = binarySearchQuality(minQuality, maxQuality);
-
-                if (bestResult && bestResult.size <= targetSizeBytes) {
-                    bestResult.compressed = true;
-                    bestResult.scaled = false;
-                    bestResult.scale = 1.0;
-                    resolve(bestResult);
-                    return;
-                }
-
-                const maxScaleAttempts = 5;
-                let scaleAttempts = 0;
-                const scaleStep = 0.85;
-
-                while (scaleAttempts < maxScaleAttempts) {
-                    scaleAttempts++;
-                    scale *= scaleStep;
-
-                    updateCompressProgress(attempts, totalAttempts + 10, null, null, scale);
-
-                    currentCanvas = scaleCanvas(canvas, scale);
-
-                    bestResult = binarySearchQuality(minQuality, maxQuality);
-
-                    if (bestResult && bestResult.size <= targetSizeBytes) {
-                        bestResult.compressed = true;
-                        bestResult.scaled = true;
-                        bestResult.scale = scale;
-                        resolve(bestResult);
-                        return;
-                    }
-                }
-
-                if (!bestResult) {
-                    bestResult = tryCompressWithQuality(minQuality);
-                }
-
-                bestResult.compressed = true;
-                bestResult.scaled = scale < 1.0;
-                bestResult.scale = scale;
-                resolve(bestResult);
-            });
-        }
-
-        function updateCompressProgress(attempt, total, quality, sizeMB, scale) {
-            compressProgressEl.classList.remove('hidden');
-            let progressText = `🔄 正在压缩图片... 尝试 ${attempt}/${total}`;
-            if (quality !== null) {
-                progressText += `，质量：${(quality * 100).toFixed(0)}%`;
+                quality -= 0.1;
             }
-            if (sizeMB !== null) {
-                progressText += `，当前大小：${sizeMB.toFixed(2)}MB`;
+
+            if (!res) {
+                current = scaleCanvas(canvas, 0.7);
+                const jpg = current.toDataURL('image/jpeg', 0.7);
+                const size = getBase64Size(jpg);
+                res = { data: jpg, format: 'jpg', size, compressed: true, scaled: true };
             }
-            if (scale !== null && scale < 1.0) {
-                progressText += `，分辨率已缩放：${(scale * 100).toFixed(0)}%`;
-            }
-            compressProgressEl.innerHTML = progressText;
-        }
 
-        function drawImagesInFrames(images, maxWidth, gap, onComplete) {
-            const totalHeight = images.reduce((sum, img) => sum + img.height, 0) + (images.length > 1 ? gap * (images.length - 1) : 0);
-            
-            resultCanvas.width = maxWidth;
-            resultCanvas.height = totalHeight;
-            resultCtx.clearRect(0, 0, maxWidth, totalHeight);
-
-            let index = 0;
-            let y = 0;
-
-            const drawNextFrame = () => {
-                const startTime = performance.now();
-                const frameTimeLimit = 50;
-
-                while (index < images.length && performance.now() - startTime < frameTimeLimit) {
-                    const img = images[index];
-                    const x = (maxWidth - img.width) / 2;
-                    resultCtx.drawImage(img, x, y, img.width, img.height);
-                    y += img.height + (index < images.length - 1 ? gap : 0);
-                    index++;
-                }
-
-                if (index < images.length) {
-                    requestAnimationFrame(drawNextFrame);
-                } else {
-                    onComplete();
-                }
-            };
-
-            drawNextFrame();
+            return res;
         }
 
         async function mergeImages() {
-            const gap = parseInt(gapInput.value) || 0;
-            const images = imageList.map(item => item.img);
+            if (isMerging || imageList.length < 1) return;
+            isMerging = true;
+            mergeBtn.disabled = true;
+            compressProgressEl.classList.remove('hidden');
+            compressProgressEl.textContent = '正在拼接图片...';
 
-            if (images.length < 1) {
-                alert('请至少添加1张图片再拼接');
-                return;
+            const gap = Math.max(0, parseInt(gapInput.value) || 0);
+            const imgs = imageList.map(i => i.img);
+            const maxW = Math.max(...imgs.map(i => i.width));
+            const totalH = imgs.reduce((s, i) => s + i.height, 0) + gap * (imgs.length - 1);
+
+            resultCanvas.width = maxW;
+            resultCanvas.height = totalH;
+            resultCtx.clearRect(0, 0, maxW, totalH);
+
+            let y = 0;
+            for (const img of imgs) {
+                const x = (maxW - img.width) / 2;
+                resultCtx.drawImage(img, x, y);
+                y += img.height + gap;
+                await new Promise(r => setTimeout(r, 10));
             }
 
-            compressProgressEl.classList.remove('hidden');
-            compressProgressEl.innerHTML = '🔄 正在绘制图片...';
+            compressProgressEl.textContent = '正在优化图片大小...';
+            const result = await smartCompress(resultCanvas);
 
-            mergeBtn.disabled = true;
-
-            const maxWidth = Math.max(...images.map(img => img.width));
-
-            await new Promise((resolve) => {
-                drawImagesInFrames(images, maxWidth, gap, resolve);
-            });
-
-            compressProgressEl.innerHTML = '🔄 正在压缩图片...';
-
-            const result = await smartCompressImage(resultCanvas, MAX_SIZE_BYTES, 0.08, 0.95);
-            
             finalImageData = result.data;
             finalImageFormat = result.format;
-            const sizeMB = result.size / 1024 / 1024;
-            const targetMB = MAX_SIZE_BYTES / 1024 / 1024;
+            const mb = (result.size / 1024 / 1024).toFixed(2);
 
-            let sizeTip = '';
-            let tipClass = '';
-            
-            if (result.format === 'png') {
-                sizeTip = `✅ 拼接完成！PNG格式，大小：${sizeMB.toFixed(2)}MB（未压缩）`;
-                tipClass = 'success';
-            } else if (result.size <= MAX_SIZE_BYTES) {
-                let scaleInfo = '';
-                if (result.scaled && result.scale < 1.0) {
-                    scaleInfo = `，分辨率缩放至 ${(result.scale * 100).toFixed(0)}%`;
-                }
-                sizeTip = `✅ 拼接完成！JPG格式，大小：${sizeMB.toFixed(2)}MB（已压缩至 ${targetMB}MB 以下${scaleInfo}）`;
-                tipClass = 'success';
-            } else {
-                let scaleInfo = '';
-                if (result.scaled && result.scale < 1.0) {
-                    scaleInfo = `，分辨率已缩放至 ${(result.scale * 100).toFixed(0)}%`;
-                }
-                sizeTip = `⚠️ 图片大小 ${sizeMB.toFixed(2)}MB 仍略大于 ${targetMB}MB${scaleInfo}，已尽力压缩（可尝试减少图片数量）`;
-                tipClass = 'warning';
-            }
-
+            sizeTipEl.className = 'size-tip ' + (result.compressed ? 'warning' : 'success');
+            sizeTipEl.textContent = `✅ 完成 | 格式：${result.format.toUpperCase()} | 大小：${mb}MB`;
+            sizeTipEl.classList.remove('hidden');
             resultCanvas.classList.remove('hidden');
             downloadBtn.classList.remove('hidden');
-            sizeTipEl.textContent = sizeTip;
-            sizeTipEl.className = `size-tip ${tipClass}`;
-            sizeTipEl.classList.remove('hidden');
-            
             compressProgressEl.classList.add('hidden');
+
+            isMerging = false;
             mergeBtn.disabled = false;
         }
 
         function showDownloadModal() {
-            if (!finalImageData) {
-                alert('暂无拼接结果可下载');
-                return;
-            }
-            const defaultName = `飞书图片拼接结果_${Date.now()}`;
-            filenameInput.value = defaultName;
+            if (!finalImageData) return alert('请先拼接图片');
+            filenameInput.value = `图片拼接_${Date.now()}`;
             selectedFormat = finalImageFormat;
-            formatOptions.forEach(opt => {
-                if (opt.dataset.format === selectedFormat) {
-                    opt.classList.add('selected');
-                    opt.querySelector('input[type="radio"]').checked = true;
-                } else {
-                    opt.classList.remove('selected');
-                    opt.querySelector('input[type="radio"]').checked = false;
-                }
+            formatOptions.forEach(o => {
+                o.classList.toggle('selected', o.dataset.format === selectedFormat);
+                o.querySelector('input').checked = o.dataset.format === selectedFormat;
             });
             downloadModal.classList.remove('hidden');
-            setTimeout(() => filenameInput.focus(), 100);
         }
 
         function hideDownloadModal() {
             downloadModal.classList.add('hidden');
         }
 
-        async function getImageDataByFormat(format) {
-            if (format === finalImageFormat) {
-                return finalImageData;
-            }
-
-            if (format === 'jpg') {
-                const result = await smartCompressImage(resultCanvas, MAX_SIZE_BYTES, 0.08, 0.95);
-                return result.data;
-            } else {
-                const pngData = resultCanvas.toDataURL('image/png', 1.0);
-                const pngSize = getBase64Size(pngData);
-                if (pngSize <= MAX_SIZE_BYTES) {
-                    return pngData;
-                }
-                const result = await smartCompressImage(resultCanvas, MAX_SIZE_BYTES, 0.08, 0.95);
-                return result.data;
-            }
-        }
-
         async function confirmDownload() {
-            let fileName = filenameInput.value.trim();
-            if (!fileName) {
-                alert('请输入文件名');
-                filenameInput.focus();
-                return;
-            }
+            const name = filenameInput.value.trim().replace(/[\\/:*?"<>|]/g, '_');
+            if (!name) return alert('请输入文件名');
 
-            fileName = fileName.replace(/[\\/:*?"<>|]/g, '_');
-            const fullFileName = `${fileName}.${selectedFormat}`;
-
-            try {
-                hideDownloadModal();
-
-                const imageData = await getImageDataByFormat(selectedFormat);
-
-                const link = document.createElement('a');
-                link.download = fullFileName;
-                link.href = imageData;
-                link.style.display = 'none';
-                document.body.appendChild(link);
-                link.click();
-                setTimeout(() => {
-                    document.body.removeChild(link);
-                }, 1000);
-            } catch (err) {
-                alert('下载失败，请重试');
-                console.error('下载失败:', err);
-            }
+            hideDownloadModal();
+            const url = finalImageData;
+            const a = document.createElement('a');
+            a.download = `${name}.${selectedFormat}`;
+            a.href = url;
+            a.click();
         }
 
         function resetAll() {
-            cancelAllLoading();
             imageList.length = 0;
             finalImageData = null;
-            finalImageFormat = 'png';
             updateImageListUI();
-            mergeBtn.disabled = true;
             resultCanvas.classList.add('hidden');
             downloadBtn.classList.add('hidden');
             sizeTipEl.classList.add('hidden');
             compressProgressEl.classList.add('hidden');
-            resultCtx.clearRect(0, 0, resultCanvas.width, resultCanvas.height);
+            mergeBtn.disabled = true;
             gapInput.value = 10;
-        }
-
-        function addLoadingIndicator(filename) {
-            const id = ++loadingIdCounter;
-            const loadingEl = document.createElement('div');
-            loadingEl.className = 'loading-item';
-            loadingEl.dataset.loadingId = id;
-            loadingEl.innerHTML = `
-                <div class="loading-spinner"></div>
-                <span class="loading-text">正在加载：${filename}</span>
-                <button class="loading-cancel" title="取消加载">×</button>
-            `;
-            imageListEl.appendChild(loadingEl);
-            
-            loadingEl.querySelector('.loading-cancel').addEventListener('click', () => {
-                cancelLoading(id);
-            });
-            
-            const controller = new AbortController();
-            loadingImages.set(id, { controller, element: loadingEl });
-            
-            return id;
-        }
-
-        function removeLoadingIndicator(id) {
-            const loading = loadingImages.get(id);
-            if (loading) {
-                loading.element.remove();
-                loadingImages.delete(id);
-            }
-        }
-
-        function cancelLoading(id) {
-            const loading = loadingImages.get(id);
-            if (loading) {
-                loading.controller.abort();
-                removeLoadingIndicator(id);
-            }
-        }
-
-        function cancelAllLoading() {
-            loadingImages.forEach((loading, id) => {
-                loading.controller.abort();
-                loading.element.remove();
-            });
-            loadingImages.clear();
+            resultCtx.clearRect(0, 0, resultCanvas.width, resultCanvas.height);
         }
 
         init();
